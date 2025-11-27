@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% set page_title = "Training Plan Detail" %}
+{% block content %}
+
+<div class="header">
+    <h1><i class="fa-solid fa-book-open"></i> {{ plan.title }}</h1>
+</div>
+
+<style>
+    .timeline-list { display: flex; flex-direction: column; gap: 12px; }
+    .timeline-item { padding: 12px; border-radius: 8px; background: #f8fafc; border-left: 4px solid #3b82f6; }
+    .timeline-date { font-size: 13px; color: #64748b; }
+    .timeline-title { font-size: 16px; font-weight: bold; margin-top: 4px; }
+    .timeline-note { font-size: 14px; color: #475569; margin-top: 3px; }
+    
+    .resource-list { list-style: none; padding-left: 0; }
+    .resource-item { margin-left: 10px; margin-top: 4px; }
+    .resource-item a { color: #2563eb; text-decoration: none; }
+    .resource-item a:hover { text-decoration: underline; }
+    
+    .modal { display: none; position: fixed; z-index: 1000; inset: 0; background: rgba(0,0,0,0.5); overflow-y: auto; }
+    .modal-content { background: white; margin: 30px auto; padding: 30px; width: 90%; max-width: 800px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+    
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: #374151; }
+    .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+    .form-group textarea { min-height: 80px; font-family: inherit; }
+    .help-text { font-size: 12px; color: #6b7280; margin-top: 4px; display: block; }
+    
+    .builder-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; background: #f9fafb; }
+    .builder-entry { display: grid; gap: 10px; padding: 12px; background: white; border-radius: 6px; margin-bottom: 10px; border: 1px solid #e5e7eb; }
+    .timeline-entry { grid-template-columns: 150px 1fr 40px; }
+    .timeline-entry-fields { display: flex; flex-direction: column; gap: 6px; }
+    .resource-entry { grid-template-columns: 1fr 40px; }
+    
+    .btn-remove { background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 8px; font-size: 14px; }
+    .btn-add { background: #10b981; color: white; border: none; border-radius: 6px; padding: 10px 16px; cursor: pointer; font-weight: 600; margin-top: 10px; width: 100%; }
+    .btn-add:hover { background: #059669; }
+    .empty-state { color: #6b7280; text-align: center; padding: 20px; }
+</style>
+
+<div style="display:grid;grid-template-columns:2fr 1.2fr;gap:20px;">
+    <div>
+        <div class="card">
+            <h3>Training Plan Information</h3>
+            <table class="detail-table">
+                <tr><th>Title</th><td>{{ plan.title }}</td></tr>
+                <tr><th>Description</th><td>{{ plan.description or "-" }}</td></tr>
+                <tr><th>Objective</th><td>{{ plan.objective or "-" }}</td></tr>
+                <tr><th>Skills</th><td>{{ plan.skills or "-" }}</td></tr>
+                <tr><th>Intern</th><td>{{ intern.name }} ({{ intern.email }})</td></tr>
+                <tr><th>Created By</th><td>User #{{ plan.created_by }}</td></tr>
+                <tr><th>Created At</th><td>{{ plan.created_at }}</td></tr>
+                <tr><th>Updated At</th><td>{{ plan.updated_at }}</td></tr>
+            </table>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+            <h3>Timeline</h3>
+            <div id="timelineBox" class="timeline-list"></div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <h3>Progress</h3>
+            <div style="background:#e5e7eb;border-radius:6px;height:16px;width:100%;overflow:hidden;">
+                <div style="background:#3b82f6;height:16px;width:{{ plan.progress }}%;"></div>
+            </div>
+            <div style="margin-top:8px;font-size:14px;color:#555;">{{ plan.progress }}% completed</div>
+            <button class="btn-primary" style="margin-top:15px;width:100%;" onclick="openEdit()">Edit Training Plan</button>
+            {% if "TRAININGPLAN_DELETE" in permissions %}
+            <button class="btn-danger" style="margin-top:10px;width:100%;" onclick="deletePlan()">Delete Training Plan</button>
+            {% endif %}
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+            <h3>Resources</h3>
+            <ul id="resourceList" class="resource-list"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="modalEdit">
+    <div class="modal-content">
+        <h3 style="margin-bottom: 20px;">Edit Training Plan</h3>
+        <div class="form-group">
+            <label>Title</label>
+            <input id="m-title" value="{{ plan.title }}" required>
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="m-description">{{ plan.description }}</textarea>
+        </div>
+        <div class="form-group">
+            <label>Objective</label>
+            <input id="m-objective" value="{{ plan.objective }}">
+        </div>
+        <div class="form-group">
+            <label>Skills</label>
+            <input id="m-skills" value="{{ plan.skills }}">
+            <small class="help-text">e.g., Python, JavaScript, React</small>
+        </div>
+        <div class="form-group">
+            <label>Timeline</label>
+            <div class="builder-box" id="timelineBuilder"></div>
+            <button type="button" class="btn-add" onclick="addEntry('timeline')">+ Add Timeline Entry</button>
+        </div>
+        <div class="form-group">
+            <label>Resources - Documents</label>
+            <div class="builder-box" id="docsBuilder"></div>
+            <button type="button" class="btn-add" onclick="addEntry('docs')">+ Add Document Link</button>
+        </div>
+        <div class="form-group">
+            <label>Resources - Videos</label>
+            <div class="builder-box" id="videosBuilder"></div>
+            <button type="button" class="btn-add" onclick="addEntry('videos')">+ Add Video Link</button>
+        </div>
+        <div class="form-group">
+            <label>Progress (%)</label>
+            <input type="number" id="m-progress" min="0" max="100" value="{{ plan.progress }}">
+        </div>
+        <button onclick="saveEdit()" class="btn-success" style="width:100%;margin-top:10px;">Save</button>
+        <button onclick="closeEdit()" class="btn-danger" style="width:100%;margin-top:10px;">Cancel</button>
+    </div>
+</div>
+
+<script>
+const CONFIG = {
+    planId: {{ plan.id | tojson }},
+    userId: {{ current_user.id | tojson }},
+    timeline: {{ plan.timeline | tojson }},
+    resources: {{ plan.resources | tojson }},
+    createdBy: {{ plan.created_by | tojson }},
+    internId: {{ plan.intern_id | tojson }}
+};
+
+const state = { timeline: [], docs: [], videos: [] };
+
+// Parse JSON data helper
+function parseData(data, fallback = []) {
+    if (!data || data === "None") return fallback;
+    if (typeof data === 'string') {
+        try { return JSON.parse(data); } catch { return fallback; }
+    }
+    return Array.isArray(data) ? [...data] : data;
+}
+
+// Modal functions
+function openEdit() {
+    state.timeline = parseData(CONFIG.timeline, []);
+    const res = parseData(CONFIG.resources, {});
+    state.docs = res.docs || [];
+    state.videos = res.videos || [];
+    
+    renderBuilder('timeline');
+    renderBuilder('docs');
+    renderBuilder('videos');
+    document.getElementById("modalEdit").style.display = "block";
+}
+
+function closeEdit() {
+    document.getElementById("modalEdit").style.display = "none";
+}
+
+// Unified entry management
+function addEntry(type) {
+    if (type === 'timeline') state.timeline.push({ date: "", title: "", note: "" });
+    else state[type].push("");
+    renderBuilder(type);
+}
+
+function removeEntry(type, idx) {
+    state[type].splice(idx, 1);
+    renderBuilder(type);
+}
+
+// Unified builder renderer
+function renderBuilder(type) {
+    const builders = {
+        timeline: { id: 'timelineBuilder', template: timelineTemplate },
+        docs: { id: 'docsBuilder', template: resourceTemplate('document') },
+        videos: { id: 'videosBuilder', template: resourceTemplate('video') }
+    };
+    
+    const { id, template } = builders[type];
+    const box = document.getElementById(id);
+    const items = state[type];
+    
+    if (!items.length) {
+        box.innerHTML = `<p class='empty-state'>No ${type} yet.</p>`;
+        return;
+    }
+    
+    box.innerHTML = items.map((item, i) => template(item, i, type)).join('');
+}
+
+function timelineTemplate(entry, i) {
+    return `
+        <div class="builder-entry timeline-entry">
+            <input type="date" value="${entry.date || ""}" onchange="state.timeline[${i}].date=this.value">
+            <div class="timeline-entry-fields">
+                <input type="text" value="${entry.title || ""}" onchange="state.timeline[${i}].title=this.value" placeholder="Title">
+                <input type="text" value="${entry.note || ""}" onchange="state.timeline[${i}].note=this.value" placeholder="Note (optional)">
+            </div>
+            <button type="button" class="btn-remove" onclick="removeEntry('timeline',${i})">×</button>
+        </div>
+    `;
+}
+
+function resourceTemplate(label) {
+    return (link, i, type) => `
+        <div class="builder-entry resource-entry">
+            <input type="url" value="${link}" onchange="state.${type}[${i}]=this.value" placeholder="https://example.com/${label}">
+            <button type="button" class="btn-remove" onclick="removeEntry('${type}',${i})">×</button>
+        </div>
+    `;
+}
+
+// Save changes
+async function saveEdit() {
+    const body = {
+        title: document.getElementById("m-title").value,
+        description: document.getElementById("m-description").value,
+        objective: document.getElementById("m-objective").value,
+        skills: document.getElementById("m-skills").value,
+        resources: JSON.stringify({
+            docs: state.docs.filter(d => d.trim()),
+            videos: state.videos.filter(v => v.trim())
+        }),
+        timeline: JSON.stringify(state.timeline.filter(t => t.title.trim())),
+        progress: parseInt(document.getElementById("m-progress").value),
+        created_by: CONFIG.createdBy,
+        intern_id: CONFIG.internId
+    };
+
+    const res = await fetch(`/api/training-plans/${CONFIG.planId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-User-ID": CONFIG.userId },
+        body: JSON.stringify(body)
+    });
+
+    if (res.ok) {
+        alert("Updated");
+        location.reload();
+    } else {
+        alert("Update failed");
+    }
+}
+
+// Delete plan
+async function deletePlan() {
+    if (!confirm("Delete this training plan?")) return;
+    
+    const res = await fetch(`/api/training-plans/${CONFIG.planId}`, {
+        method: "DELETE",
+        headers: { "X-User-ID": CONFIG.userId }
+    });
+
+    if (res.ok) {
+        alert("Deleted");
+        window.location.href = "/training-plans";
+    } else {
+        alert("Delete failed");
+    }
+}
+
+// Load and render display data
+function loadDisplay() {
+    const timeline = parseData(CONFIG.timeline);
+    const box = document.getElementById("timelineBox");
+    
+    if (!timeline.length) {
+        box.innerHTML = "<p>No timeline data.</p>";
+    } else {
+        box.innerHTML = timeline.map(i => `
+            <div class="timeline-item">
+                <div class="timeline-date">${i.date || ""}</div>
+                <div class="timeline-title">${i.title || ""}</div>
+                <div class="timeline-note">${i.note || ""}</div>
+            </div>
+        `).join('');
+    }
+    
+    const resources = parseData(CONFIG.resources, {});
+    const rbox = document.getElementById("resourceList");
+    
+    if (!resources.docs?.length && !resources.videos?.length) {
+        rbox.innerHTML = "<p>No resources available.</p>";
+    } else {
+        let html = "";
+        if (resources.docs?.length) {
+            html += `<li style="margin-top:8px;"><b>Documents:</b></li>`;
+            resources.docs.forEach(link => {
+                html += `<li class="resource-item"><a href="${link}" target="_blank">${link}</a></li>`;
+            });
+        }
+        if (resources.videos?.length) {
+            html += `<li style="margin-top:12px;"><b>Videos:</b></li>`;
+            resources.videos.forEach(link => {
+                html += `<li class="resource-item"><a href="${link}" target="_blank">${link}</a></li>`;
+            });
+        }
+        rbox.innerHTML = html;
+    }
+}
+
+loadDisplay();
+</script>
+
+{% endblock %}

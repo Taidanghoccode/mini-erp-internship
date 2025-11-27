@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% set page_title = "Project Feedbacks (from Interns)" %}
+{% block content %}
+
+<div class="header">
+  <h1><i class="fa-solid fa-comments"></i> Project Feedbacks (from Interns)</h1>
+  <div style="display: flex; gap: 12px; align-items: center;">
+    <select id="f-intern" style="min-width: 180px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+      <option value="">All Interns</option>
+    </select>
+    <select id="f-project" style="min-width: 200px; padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+      <option value="">All Projects</option>
+    </select>
+    <button id="btn-search" class="btn-primary">Filter</button>
+    <button id="btn-export" class="btn-success">
+      <i class="fa fa-download"></i> Export CSV
+    </button>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <h3><i class="fa-solid fa-comments"></i> Total Reviews</h3>
+    <div class="number" id="kpi-total">–</div>
+  </div>
+  
+  <div class="stat-card" style="border-left-color: var(--fpt-green);">
+    <h3><i class="fa-solid fa-star"></i> Average Project Rating</h3>
+    <div class="number" id="kpi-avg">–</div>
+  </div>
+  
+  <div class="stat-card" style="border-left-color: var(--fpt-orange);">
+    <h3><i class="fa-solid fa-user-clock"></i> Most Active Intern</h3>
+    <div class="number" id="kpi-top-intern" style="font-size: 20px;">–</div>
+  </div>
+  
+  <div class="stat-card" style="border-left-color: #6c757d;">
+    <h3><i class="fa-solid fa-diagram-project"></i> Top Rated Project</h3>
+    <div class="number" id="kpi-top-project" style="font-size: 20px;">–</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <h2 style="margin:0;"><i class="fa-solid fa-user-graduate"></i> Intern Review Activity</h2>
+        <div style="font-size:12px;color:#777;">Interns giving reviews to projects (who rated, how often, and their average rating given).</div>
+      </div>
+    </div>
+    <table id="tb-intern">
+      <thead>
+        <tr>
+          <th>Intern</th>
+          <th>Review Count</th>
+          <th>Average Rating (★ given)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="3" style="text-align: center; color: #999;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <h2 style="margin:0;"><i class="fa-solid fa-diagram-project"></i> Project Ratings (from Intern Reviews)</h2>
+        <div style="font-size:12px;color:#777;">Projects being rated by interns based on their internship experience.</div>
+      </div>
+    </div>
+    <table id="tb-project">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Review Count</th>
+          <th>Average Rating (★)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="3" style="text-align: center; color: #999;">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top: 24px;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <h2 style="margin:0;"><i class="fa-solid fa-list"></i> All Project Reviews</h2>
+    <span style="font-size:12px;color:#777;">Each row = one intern reviewing one project.</span>
+  </div>
+
+  <table id="tb-list">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Intern</th>
+        <th>Project</th>
+        <th>Rating</th>
+        <th>Comment</th>
+        <th>Date</th>
+        <th width="120px">Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="7" style="text-align:center; color:#999;">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const el = id => document.getElementById(id);
+let cache = { interns: [], projects: [], feedbacks: [] };
+
+async function loadOptions() {
+  try {
+    const [interns, projects] = await Promise.all([
+      (await fetch('/api/interns/')).json(),
+      (await fetch('/api/projects/')).json()
+    ]);
+
+    cache.interns = (interns || []).filter(i => !i.is_deleted);
+    cache.projects = (projects || []).filter(p => !p.is_deleted);
+
+    el('f-intern').innerHTML = `<option value="">All Interns</option>` +
+      cache.interns.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+
+    el('f-project').innerHTML = `<option value="">All Projects</option>` +
+      cache.projects.map(p => `<option value="${p.id}">${p.title}</option>`).join('');
+  } catch (e) {
+    console.error('Error loadOptions:', e);
+  }
+}
+
+async function loadFeedbacks() {
+  try {
+    const all = await (await fetch('/api/feedbacks/')).json();
+    cache.feedbacks = (all || []).filter(f => !f.is_deleted);
+  } catch (e) {
+    console.error('Error loadFeedbacks:', e);
+    cache.feedbacks = [];
+  }
+}
+
+function getFilteredFeedbacks() {
+  const internId = el('f-intern').value ? Number(el('f-intern').value) : null;
+  const projectId = el('f-project').value ? Number(el('f-project').value) : null;
+
+  return cache.feedbacks.filter(f => {
+    if (internId && f.intern_id !== internId) return false;
+    if (projectId && f.project_id !== projectId) return false;
+    return true;
+  });
+}
+
+function calcAndRender() {
+  const filtered = getFilteredFeedbacks();
+
+  const total = filtered.length;
+  const avg = total ? (filtered.reduce((s, f) => s + (Number(f.rating) || 0), 0) / total) : 0;
+
+  el('kpi-total').innerText = total;
+  el('kpi-avg').innerText = total ? avg.toFixed(2) : '–';
+
+  const byIntern = {};
+  const byProject = {};
+
+  filtered.forEach(f => {
+    const internName = cache.interns.find(i => i.id === f.intern_id)?.name || `Intern #${f.intern_id || '-'}`;
+    if (!byIntern[internName]) byIntern[internName] = { sum: 0, count: 0 };
+    byIntern[internName].sum += (+f.rating || 0);
+    byIntern[internName].count++;
+
+    const projName = cache.projects.find(p => p.id === f.project_id)?.title || `Project #${f.project_id || '-'}`;
+    if (!byProject[projName]) byProject[projName] = { sum: 0, count: 0 };
+    byProject[projName].sum += (+f.rating || 0);
+    byProject[projName].count++;
+  });
+
+  const internEntries = Object.entries(byIntern);
+  const projectEntries = Object.entries(byProject);
+
+  const mostActive = internEntries
+    .slice()
+    .sort((a, b) => b[1].count - a[1].count)[0];
+
+  el('kpi-top-intern').innerHTML = mostActive
+    ? `${mostActive[0]}<br><small style="font-size:14px;color:#666;">${mostActive[1].count} review(s)</small>`
+    : '–';
+
+  const topProject = projectEntries
+    .slice()
+    .sort((a, b) => (b[1].sum / b[1].count) - (a[1].sum / a[1].count))[0];
+
+  el('kpi-top-project').innerHTML = topProject
+    ? `${topProject[0]}<br><small style="font-size:14px;color:#666;">${(topProject[1].sum / topProject[1].count).toFixed(2)}★</small>`
+    : '–';
+
+  const tbI = document.querySelector('#tb-intern tbody');
+  tbI.innerHTML = internEntries.length
+    ? internEntries
+        .sort((a, b) => (b[1].sum / b[1].count) - (a[1].sum / a[1].count))
+        .map(([name, v]) => `
+          <tr>
+            <td>${name}</td>
+            <td>${v.count}</td>
+            <td>${(v.sum / v.count).toFixed(2)}</td>
+          </tr>
+        `)
+        .join('')
+    : `<tr><td colspan="3" style="text-align:center;color:#999;">No data</td></tr>`;
+
+  const tbP = document.querySelector('#tb-project tbody');
+  tbP.innerHTML = projectEntries.length
+    ? projectEntries
+        .sort((a, b) => (b[1].sum / b[1].count) - (a[1].sum / a[1].count))
+        .map(([name, v]) => `
+          <tr>
+            <td>${name}</td>
+            <td>${v.count}</td>
+            <td>${(v.sum / v.count).toFixed(2)}</td>
+          </tr>
+        `)
+        .join('')
+    : `<tr><td colspan="3" style="text-align:center;color:#999;">No data</td></tr>`;
+
+  renderFeedbackList(filtered);
+}
+
+function renderFeedbackList(list) {
+  const tb = document.querySelector('#tb-list tbody');
+
+  if (!list.length) {
+    tb.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#999;">No reviews</td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = list.map(f => {
+    const intern = cache.interns.find(i => i.id === f.intern_id)?.name || `Intern #${f.intern_id || '-'}`;
+    const project = cache.projects.find(p => p.id === f.project_id)?.title || `Project #${f.project_id || '-'}`;
+
+    return `
+      <tr>
+        <td>${f.id}</td>
+        <td>${intern}</td>
+        <td>${project}</td>
+        <td>${f.rating} ★</td>
+        <td>${f.comment || '-'}</td>
+        <td>${f.created_at}</td>
+        <td>
+          <button class="btn-danger" onclick="deleteFb(${f.id})">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function deleteFb(id) {
+  if (!confirm("Delete this review?")) return;
+  await fetch(`/api/feedbacks/${id}`, { method: "DELETE" });
+  await loadFeedbacks();
+  calcAndRender();
+}
+
+function exportCSV() {
+  const filtered = getFilteredFeedbacks();
+
+  const mapI = new Map(cache.interns.map(i => [i.id, i.name]));
+  const mapP = new Map(cache.projects.map(p => [p.id, p.title]));
+
+  const header = ['ID', 'Intern', 'Project', 'Rating', 'Comment', 'Date'];
+  const data = filtered.map(f => [
+    f.id,
+    mapI.get(f.intern_id) || `Intern #${f.intern_id}`,
+    mapP.get(f.project_id) || `Project #${f.project_id}`,
+    f.rating ?? '',
+    (f.comment || '').replace(/,/g, ' '),
+    f.created_at || ''
+  ]);
+
+  const csv = [header, ...data].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'project_reviews_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+}
+
+el('btn-search').onclick = calcAndRender;
+el('btn-export').onclick = exportCSV;
+
+(async function() {
+  await loadOptions();
+  await loadFeedbacks();
+  calcAndRender();
+})();
+</script>
+
+{% endblock %}

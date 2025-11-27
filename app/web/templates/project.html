@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% set page_title = "Projects" %}
+{% block content %}
+
+<!-- TOAST -->
+<div id="toast" style="
+    position: fixed; top: 20px; right: 20px; z-index: 99999;
+    display: flex; flex-direction: column; gap: 10px;"></div>
+
+<script>
+function showToast(message, type="success") {
+    const toast = document.getElementById("toast");
+    const t = document.createElement("div");
+
+    const colors = {
+        success: "#16a34a",
+        error:   "#dc2626",
+        info:    "#2563eb"
+    };
+
+    t.style.background = colors[type];
+    t.style.color = "#fff";
+    t.style.padding = "12px 16px";
+    t.style.borderRadius = "6px";
+    t.style.fontWeight = "600";
+    t.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
+    t.style.opacity = "0";
+    t.style.transition = "all .3s ease";
+    t.innerText = message;
+
+    toast.appendChild(t);
+
+    setTimeout(() => { t.style.opacity = 1; }, 10);
+    setTimeout(() => { 
+        t.style.opacity = 0;
+        setTimeout(() => t.remove(), 300);
+    }, 2600);
+}
+</script>
+
+<!-- HEADER -->
+<div class="header">
+  <h1><i class="fa-solid fa-diagram-project"></i> Projects</h1>
+  <div class="header-actions">
+    <input id="searchInput" placeholder="Search..." style="padding:8px; min-width:260px;">
+    <button id="btnSearch" class="btn-primary">Search</button>
+    <button onclick="openCreateModal()" class="btn-success"><i class="fa fa-plus"></i> Add Project</button>
+  </div>
+</div>
+
+<!-- KANBAN -->
+<div id="kanbanView">
+  <div class="kanban-board">
+    <div class="kanban-column" id="colNew"><h3>New <span class="badge-small">0</span></h3></div>
+    <div class="kanban-column" id="colProgress"><h3>In Progress <span class="badge-small">0</span></h3></div>
+    <div class="kanban-column" id="colDone"><h3>Done <span class="badge-small">0</span></h3></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal" id="projectModal">
+  <div class="modal-content" style="max-width:460px;">
+    <h3 id="modalTitle">Add Project</h3>
+
+    <input id="p-title" placeholder="Project Title" oninput="validateTitleLive()">
+    <div id="titleErr" style="color:#dc2626; font-size:13px; margin:4px 0 8px 2px;"></div>
+
+    <textarea id="p-desc" placeholder="Description" rows="3"></textarea>
+
+    <select id="p-status">
+      <option value="new">New</option>
+      <option value="progress">In Progress</option>
+      <option value="done">Done</option>
+    </select>
+
+    <button id="btnSave" onclick="saveProject()" class="btn-success" style="margin-top:10px;">Save</button>
+    <button onclick="closeModal()" class="btn-danger" style="margin-top:10px;">Cancel</button>
+  </div>
+</div>
+
+<script>
+let editingID = null;
+const el = id => document.getElementById(id);
+
+async function safeJson(res){
+  if(!res.ok){
+    let t = await res.text();
+    showToast(t, "error");
+    throw new Error(t);
+  }
+  return res.json();
+}
+
+function statusBtn(state, p){
+  const label = {
+    "new": "New",
+    "progress": "In Progress",
+    "done": "Done"
+  }[state];
+
+  // ❌ Không cho đổi nếu project đã DONE
+  if(p.status === "done") {
+    const active = p.status === state ? "active" : "";
+    return `<button class="qbtn ${active}" disabled>${label}</button>`;
+  }
+
+  const active = (p.status||"new") === state ? "active" : "";
+  return `<button class="qbtn ${active}" onclick="quickStatus(${p.id}, '${state}')">${label}</button>`;
+}
+
+function esc(t){ return String(t).replace(/"/g, "&quot;").replace(/'/g, "\\'"); }
+
+function cardHtml(p){
+  return `
+    <div class="kanban-card">
+      <div style="display:flex; justify-content:space-between; gap:8px;">
+        <div>
+          <h4 style="margin:0 0 4px 0;">${p.title}</h4>
+          <div class="badge-small">${p.intern_count||0} interns</div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-icon btn-view" onclick="viewDetail(${p.id})"><i class="fa-solid fa-eye"></i></button>
+          <button class="btn-icon btn-edit" onclick="openEdit(${p.id}, '${esc(p.title)}', '${esc(p.description||"")}', '${p.status||"new"}')"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn-icon btn-delete" onclick="deleteProject(${p.id})"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>
+      <p style="margin:6px 0 10px 0;">${p.description||""}</p>
+      ${statusBtn("new",p)} ${statusBtn("progress",p)} ${statusBtn("done",p)}
+    </div>
+  `;
+}
+
+async function loadKanban(){
+  try{
+    const data = await safeJson(await fetch("/api/projects/"));
+
+    const kw = el("searchInput").value.trim().toLowerCase();
+    const filtered = kw ? data.filter(p => (p.title||"").toLowerCase().includes(kw)) : data;
+
+    const newC = filtered.filter(p => (p.status||"new")==="new");
+    const proC = filtered.filter(p => p.status==="progress");
+    const doneC = filtered.filter(p => p.status==="done");
+
+    el("colNew").innerHTML = `<h3>New <span class="badge-small">${newC.length}</span></h3>` + newC.map(cardHtml).join("");
+    el("colProgress").innerHTML = `<h3>In Progress <span class="badge-small">${proC.length}</span></h3>` + proC.map(cardHtml).join("");
+    el("colDone").innerHTML = `<h3>Done <span class="badge-small">${doneC.length}</span></h3>` + doneC.map(cardHtml).join("");
+
+  }catch{
+    showToast("Failed to load projects", "error");
+  }
+}
+
+function viewDetail(id){ window.location.href = "/projects/" + id; }
+
+function openCreateModal(){
+  editingID = null;
+  el("modalTitle").innerText = "Add Project";
+  el("p-title").value = "";
+  el("p-desc").value = "";
+  el("p-status").value = "new";
+  el("titleErr").innerText = "";
+  el("p-status").disabled = false;
+  el("projectModal").style.display = "flex";
+}
+
+function openEdit(id,title,desc,status){
+  editingID = id;
+  el("modalTitle").innerText = "Edit Project";
+  el("p-title").value = title;
+  el("p-desc").value = desc;
+  el("p-status").value = status;
+
+  // ❌ Disable status if project already DONE
+  el("p-status").disabled = (status === "done");
+
+  el("titleErr").innerText = "";
+  el("projectModal").style.display = "flex";
+}
+
+function validateTitleLive(){
+  const v = el("p-title").value.trim();
+  if(!v){
+    el("titleErr").innerText = "Title is required!";
+    return false;
+  }
+  el("titleErr").innerText = "";
+  return true;
+}
+
+async function saveProject(){
+  if(!validateTitleLive()) return;
+
+  const body = {
+    title: el("p-title").value.trim(),
+    description: el("p-desc").value.trim(),
+    status: el("p-status").value
+  };
+
+  const url = editingID ? `/api/projects/${editingID}` : "/api/projects/";
+  const method = editingID ? "PUT" : "POST";
+
+  try{
+    const r = await safeJson(await fetch(url,{
+      method,
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify(body)
+    }));
+
+    showToast(editingID ? "Project updated" : "Project created", "success");
+    closeModal();
+    loadKanban();
+  }catch{
+    showToast("Failed to save", "error");
+  }
+}
+
+function closeModal(){ el("projectModal").style.display = "none"; }
+
+async function deleteProject(id){
+  if(!confirm("Delete project?")) return;
+  try{
+    await safeJson(await fetch(`/api/projects/${id}`,{method:"DELETE"}));
+    showToast("Project deleted", "info");
+    loadKanban();
+  }catch{
+    showToast("Delete failed", "error");
+  }
+}
+
+async function quickStatus(id,status){
+  try{
+
+    // Check current status
+    const r = await fetch(`/api/projects/${id}`);
+    const p = await r.json();
+
+    if(p.status === "done"){
+      showToast("This project is already completed", "error");
+      return;
+    }
+
+    await safeJson(await fetch(`/api/projects/${id}`,{
+      method:"PUT",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({status})
+    }));
+
+    showToast("Status updated", "success");
+    loadKanban();
+  }catch{
+    showToast("Status update failed", "error");
+  }
+}
+
+el("btnSearch").onclick = loadKanban;
+loadKanban();
+</script>
+
+{% endblock %}

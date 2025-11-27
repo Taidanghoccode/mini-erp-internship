@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+{% set page_title = "Project Detail" %}
+{% block content %}
+
+<div class="header">
+    <h1><i class="fa-solid fa-diagram-project"></i> {{ project.title }}</h1>
+</div>
+
+<div style="display:grid;grid-template-columns:2fr 1.5fr;gap:20px;">
+    <div>
+        <div class="card">
+            <h3>Project Information</h3>
+            <table class="detail-table">
+                <tr><th>Title</th><td>{{ project.title }}</td></tr>
+                <tr><th>Description</th><td>{{ project.description or '-' }}</td></tr>
+                <tr><th>Start Date</th><td>{{ project.start_date }}</td></tr>
+                <tr><th>End Date</th><td>{{ project.end_date or '-' }}</td></tr>
+                <tr><th>Status</th><td>{{ project.status }}</td></tr>
+            </table>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                <h3>Interns Assigned</h3>
+                {% if "PROJECT_ASSIGN_INTERN" in current_user.permission_codes %}
+                <button id="btnAssign" class="btn-primary">Assign Intern</button>
+                {% endif %}
+            </div>
+            <table id="tblInterns">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Date</th>
+                        {% if "PROJECT_DELETE" in current_user.permission_codes %}
+                        <th>Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="5" class="text-center">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+                <h3>Project Reviews</h3>
+                <button id="btnRate" class="btn-primary">
+                    <i class="fa-solid fa-star"></i> Rate Project
+                </button>
+            </div>
+            <div id="stats" style="background:#f3f4f6;padding:10px;border-radius:4px;margin-bottom:15px;text-align:center;"></div>
+            <table id="tblFeedback">
+                <thead>
+                    <tr>
+                        <th>Reviewer</th>
+                        <th>Rating</th>
+                        <th>Comment</th>
+                        <th>Date</th>
+                        {% if "FEEDBACK_DELETE" in current_user.permission_codes %}
+                        <th>Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody><tr><td colspan="5" class="text-center">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="modalAssign" class="modal">
+    <div class="modal-content">
+        <h3>Assign Intern</h3>
+        <form id="frmAssign">
+            <label>Intern *</label>
+            <select id="selIntern" name="intern_id" required>
+                <option value="">-- Select --</option>
+            </select>
+            <label>Role</label>
+            <input type="text" name="role" value="Member">
+            <div id="warnAssign" style="display:none;background:#fef3c7;padding:8px;border-radius:4px;margin:8px 0;"></div>
+            <div id="errAssign" class="err"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary close">Cancel</button>
+                <button type="submit" class="btn-primary">Assign</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="modalRate" class="modal">
+    <div class="modal-content">
+        <h3><i class="fa-solid fa-star"></i> Rate Project</h3>
+        <p style="color:#666;margin-bottom:15px;">Share your experience working on this project</p>
+        <form id="frmRate">
+            <label>Rating (1-5)</label>
+            <div class="star-rating">
+                <i class="fa-star far" data-value="1"></i>
+                <i class="fa-star far" data-value="2"></i>
+                <i class="fa-star far" data-value="3"></i>
+                <i class="fa-star far" data-value="4"></i>
+                <i class="fa-star far" data-value="5"></i>
+            </div>
+            <div style="text-align:center;color:#666;font-size:14px;margin-top:-5px;">
+                <span id="ratingValue">0</span>/5
+            </div>
+            <input type="hidden" name="score" required>
+            
+            <label>Comment (max 100 characters)</label>
+            <textarea name="comment" maxlength="100" rows="3" placeholder="Great project! Learned a lot..."></textarea>
+            <small style="color:#666;"><span id="cntRate">0</span>/100 characters</small>
+            
+            <div id="errRate" class="err"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary close">Cancel</button>
+                <button type="submit" class="btn-primary">Submit Rating</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;z-index:1000;}
+.modal-content{background:#fff;padding:25px;border-radius:8px;max-width:450px;width:90%;max-height:90vh;overflow-y:auto;}
+.err{color:#dc2626;margin-top:8px;}
+.text-center{text-align:center;}
+.editable-feedback{cursor:pointer;transition:background 0.2s;}
+.editable-feedback:hover{background:#f9fafb;}
+.star-rating { display:flex;gap:8px;font-size:32px;margin:10px 0;justify-content:center; }
+.star-rating i { cursor:pointer;color:#d1d5db;transition:color 0.2s; }
+.star-rating i:hover,
+.star-rating i.hover { color:#fbbf24; }
+.star-rating i.fas { color:#fbbf24; }
+</style>
+
+<script>
+const UID = JSON.parse('{{ current_user.id | tojson }}');
+const PID = JSON.parse('{{ project.id | tojson }}');
+
+const CAN_DEL = JSON.parse('{{ ("PROJECT_DELETE" in current_user.permission_codes) | tojson }}');
+const CAN_DEL_FB = JSON.parse('{{ ("FEEDBACK_DELETE" in current_user.permission_codes) | tojson }}');
+
+let userFeedback = null;
+
+document.addEventListener("click",e=>{
+    if(e.target.classList.contains("close")||e.target.classList.contains("modal"))
+        e.target.closest(".modal").style.display="none";
+});
+
+function open(id){document.getElementById(id).style.display="flex";}
+
+const ta=document.querySelector('#frmRate textarea'),cnt=document.getElementById('cntRate');
+if(ta&&cnt)ta.oninput=()=>cnt.textContent=ta.value.length;
+
+const stars = document.querySelectorAll(".star-rating i");
+const scoreInput = document.querySelector("#frmRate input[name='score']");
+const ratingValue = document.getElementById("ratingValue");
+
+stars.forEach((star, index) => {
+    star.addEventListener("click", () => {
+        const value = star.dataset.value;
+        scoreInput.value = value;
+        ratingValue.textContent = value;
+        updateStars(value);
+    });
+
+    star.addEventListener("mouseenter", () => {
+        highlightStars(star.dataset.value);
+    });
+});
+
+document.querySelector(".star-rating").addEventListener("mouseleave", () => {
+    updateStars(scoreInput.value);
+});
+
+function highlightStars(value) {
+    stars.forEach((star, index) => {
+        if (index < value) {
+            star.classList.add("hover");
+        } else {
+            star.classList.remove("hover");
+        }
+    });
+}
+
+function updateStars(value) {
+    stars.forEach((star, index) => {
+        if (index < value) {
+            star.classList.remove("far");
+            star.classList.add("fas");
+        } else {
+            star.classList.remove("fas");
+            star.classList.add("far");
+        }
+    });
+}
+
+function openEditFeedback(fb){
+    scoreInput.value = fb.score || 0;
+    ratingValue.textContent = fb.score || 0;
+    updateStars(fb.score || 0);
+    document.querySelector('#frmRate textarea[name="comment"]').value = fb.comment || '';
+    document.getElementById('cntRate').textContent = (fb.comment || '').length;
+    open("modalRate");
+}
+
+async function loadInterns(){
+    try{
+        const r=await fetch(`/api/intern-project/${PID}/interns`,{headers:{"X-User-ID":UID}});
+        if(!r.ok)throw new Error();
+        const d=await r.json(),tb=document.querySelector("#tblInterns tbody");
+        tb.innerHTML=!d?.length?`<tr><td colspan="${CAN_DEL?5:4}" class="text-center">No interns assigned</td></tr>`:'';
+        d.forEach(i=>{  
+            tb.innerHTML+=`<tr><td>${i.name||'-'}</td><td>${i.email||'-'}</td><td>${i.role_in_project||'-'}</td><td>${i.assigned_date||'-'}</td>
+            ${CAN_DEL?`<td><button class="btn-danger btn-sm rm" data-id="${i.id}" data-n="${i.name}">Remove</button></td>`:''}</tr>`;
+        });
+        if(CAN_DEL)document.querySelectorAll(".rm").forEach(b=>b.onclick=async()=>{
+            if(!confirm(`Remove ${b.dataset.n}?`))return;
+            const r=await fetch("/api/intern-project/remove",{method:"POST",headers:{"Content-Type":"application/json","X-User-ID":UID},body:JSON.stringify({intern_id:+b.dataset.id,project_id:PID})});
+            if(r.ok)loadInterns();
+        });
+    }catch(e){console.error(e);}
+}
+
+async function loadFeedback(){
+    try{
+        const r=await fetch(`/api/feedback/project/${PID}`,{headers:{"X-User-ID":UID}});
+        if(!r.ok)throw new Error();
+        const d=await r.json(),tb=document.querySelector("#tblFeedback tbody"),st=document.getElementById("stats");
+        tb.innerHTML='';
+        
+        if(!d?.length){
+            tb.innerHTML='<tr><td colspan="5" class="text-center">No reviews yet</td></tr>';
+            st.innerHTML='<span style="color:#999;">No reviews yet - be the first to rate!</span>';
+            document.getElementById("btnRate").style.display="inline-flex";
+            return;
+        }
+
+        userFeedback=d.find(f=>f.from_user_id===UID);
+        
+        if(userFeedback){
+            document.getElementById("btnRate").style.display="none";
+        }else{
+            document.getElementById("btnRate").style.display="inline-flex";
+        }
+        
+        const total=d.reduce((s,f)=>s+(f.score||0),0);
+        const avg=(total/d.length).toFixed(1);
+        
+        st.innerHTML=`<div style="font-size:28px;color:#fbbf24;font-weight:bold;">${avg}/5 ★</div>
+                      <div style="color:#666;">${d.length} ${d.length===1?'review':'reviews'}</div>`;
+
+        d.forEach(f=>{
+            const isOwn=f.from_user_id===UID;
+            tb.innerHTML+=`<tr class="${isOwn?'editable-feedback':''}" data-id="${f.id}" data-score="${f.score}" data-comment="${f.comment || ''}"${isOwn?'position:relative;':''}">
+                <td>${f.username||f.from_user_name||'User #'+f.from_user_id}</td>
+                <td><div style="color:#fbbf24;">${'★'.repeat(f.score || 0)}${'☆'.repeat(5 - (f.score || 0))}</div></td>
+                <td>${f.comment||'-'}</td>
+                <td>${f.created_at?new Date(f.created_at).toLocaleDateString():'-'}</td>
+                ${CAN_DEL_FB?`<td><button class="btn-danger btn-sm rmfb" data-id="${f.id}">Delete</button></td>`:''}</tr>`;
+        });
+
+        document.querySelectorAll(".editable-feedback").forEach(row=>{
+            row.addEventListener("click",e=>{
+                if(e.target.classList.contains("rmfb"))return;
+                const fb= {
+                    id: row.dataset.id, 
+                    score: row.dataset.score,
+                    comment: row.dataset.comment
+                };
+                openEditFeedback(fb);
+            });
+        });
+
+        if(CAN_DEL_FB)document.querySelectorAll(".rmfb").forEach(b=>b.onclick=async(e)=>{
+            e.stopPropagation();
+            if(!confirm('Delete this review?'))return;
+            const r=await fetch(`/api/feedback/${b.dataset.id}`,{method:"DELETE",headers:{"X-User-ID":UID}});
+            if(r.ok)loadFeedback();
+        });
+    }catch(e){console.error(e);}
+}
+
+async function loadInternsList(){
+    try{
+        const r=await fetch("/api/interns/",{headers:{"X-User-ID":UID}});
+        if(!r.ok)return;
+        const d=await r.json(),sel=document.getElementById("selIntern");
+        sel.innerHTML='<option value="">-- Select --</option>';
+        d.forEach(i=>sel.innerHTML+=`<option value="${i.id}">${i.name} (${i.email})</option>`);
+    }catch(e){console.error(e);}
+}
+
+document.getElementById("btnAssign")?.addEventListener("click",()=>{loadInternsList();open("modalAssign");});
+
+document.getElementById("selIntern")?.addEventListener("change",async e=>{
+    const w=document.getElementById("warnAssign");
+    w.style.display="none";
+    if(!e.target.value)return;
+    try{
+        const r=await fetch(`/api/intern-project/${e.target.value}/projects`,{headers:{"X-User-ID":UID}});
+        if(!r.ok)return;
+        const p=(await r.json()).filter(x=>x.status?.toLowerCase()==='active'&&x.project_id!==PID);
+        if(p.length){
+            w.innerHTML=`⚠️ Already in: <b>${p.map(x=>x.title||x.project_id).join(', ')}</b>`;
+            w.style.display="block";
+        }
+    }catch(e){console.error(e);}
+});
+
+document.getElementById("frmAssign").onsubmit=async e=>{
+    e.preventDefault();
+    const err=document.getElementById("errAssign");
+    err.textContent="";
+    const fd=new FormData(e.target);
+    try{
+        const r=await fetch("/api/intern-project/assign",{method:"POST",headers:{"Content-Type":"application/json","X-User-ID":UID},
+            body:JSON.stringify({project_id:PID,intern_id:+fd.get("intern_id"),role:fd.get("role")||"Member"})});
+        const d=await r.json();
+        if(!r.ok){err.textContent=d.error||"Failed";return;}
+        document.getElementById("modalAssign").style.display="none";
+        e.target.reset();
+        loadInterns();
+    }catch(ex){err.textContent=ex.message;}
+};
+
+document.getElementById("btnRate")?.addEventListener("click",()=>{
+    scoreInput.value = "";
+    ratingValue.textContent = "0";
+    updateStars(0);
+    document.querySelector("#frmRate textarea").value = "";
+    cnt.textContent = "0";
+    open("modalRate");
+});
+
+document.getElementById("frmRate").onsubmit = async e => {
+    e.preventDefault();
+    const err = document.getElementById("errRate");
+    err.textContent = "";
+    const fd = new FormData(e.target);
+    const score = +fd.get("score");
+
+    if (score < 1 || score > 5) {
+        err.textContent = "Please select a rating (1-5 stars)";
+        return;
+    }
+
+    try {
+        let url = "/api/feedback/intern/project";
+        let method = "POST";
+
+        let payload = {
+        intern_id: UID,      
+        project_id: PID,   
+        score: score,
+        comment: fd.get("comment") || ""
+};
+
+        if (userFeedback) {
+            url = `/api/feedback/${userFeedback.id}`;
+            method = "PUT";
+        } else {
+            payload.project_id = PID;
+        }
+
+        const r = await fetch(url, {
+            method,
+            headers: {
+                "Content-Type": "application/json",
+                "X-User-ID": UID
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const d = await r.json();
+
+        if (!r.ok) {
+            err.textContent = d.error || "Failed to submit rating";
+            return;
+        }
+
+        document.getElementById("modalRate").style.display = "none";
+        e.target.reset();
+        ratingValue.textContent = "0";
+        updateStars(0);
+        document.getElementById("cntRate").textContent = "0";
+        loadFeedback();
+
+        alert(userFeedback ? "Updated your review!" : "Thank you for your review!");
+
+    } catch (ex) {
+        err.textContent = ex.message;
+    }
+};
+
+document.addEventListener("DOMContentLoaded",()=>{loadInterns();loadFeedback();});
+</script>
+
+{% endblock %}

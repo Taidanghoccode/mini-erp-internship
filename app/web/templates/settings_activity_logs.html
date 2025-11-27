@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set page_title = "Settings > Activity Logs" %}
+{% block content %}
+
+<div class="header">
+    <h1><i class="fa-solid fa-list"></i> Activity Logs</h1>
+</div>
+
+<div class="settings-menu">
+    <a href="/settings">General</a>
+    <a href="/settings/activity-logs" class="active">Activity Logs</a>
+</div>
+
+<div class="card">
+    <table id="logTable">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Action</th>
+                <th>Details</th>
+                <th>Time</th>
+                <th width="80px">Delete</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", loadLogs);
+
+async function loadLogs() {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch("/api/logs/", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+
+    const data = await res.json();
+    const tbody = document.querySelector("#logTable tbody");
+    tbody.innerHTML = "";
+
+    data.forEach(l => {
+        tbody.innerHTML += `
+        <tr>
+            <td>${l.user_id || "-"}</td>
+            <td>${l.action}</td>
+            <td>${l.details}</td>
+            <td>${l.timestamp}</td>
+            <td>
+                <button onclick="deleteLog(${l.id})" class="btn-danger">✖</button>
+            </td>
+        </tr>`;
+    });
+}
+
+async function deleteLog(id) {
+    if (!confirm("Delete log?")) return;
+
+    const token = localStorage.getItem("token");
+
+    await fetch("/api/logs/" + id, {
+        method: "DELETE",
+        headers: { "Authorization": "Bearer " + token }
+    });
+
+    loadLogs();
+}
+</script>
+
+{% endblock %}

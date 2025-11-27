@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% set page_title = "Training Plans" %}
+{% block content %}
+
+<div class="header">
+    <h1><i class="fa-solid fa-book-open"></i> Training Plans</h1>
+    <div class="filter-row" id="filterRow">
+        <input id="searchInput" placeholder="Search title...">
+        <select id="filterIntern">
+            <option value="">Intern (All)</option>
+        </select>
+        <button onclick="loadPlans()" class="btn-primary">Search</button>
+        <button onclick="openCreateModal()" id="btnAddPlan" class="btn-success">
+            <i class="fa fa-plus"></i> Add Plan
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <table id="planTable">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Intern</th>
+                <th>Progress</th>
+                <th>Created By</th>
+                <th width="120px">Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<!-- ================= MODAL ================= -->
+<div class="modal" id="planModal">
+    <div class="modal-content modal-wide">
+        <div class="modal-header">
+            <h3 id="modalTitle"></h3>
+            <span class="close" onclick="closeModal()">×</span>
+        </div>
+
+        <div class="modal-body">
+
+            <!-- ROW 1 -->
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input id="m-title">
+                </div>
+
+                <div class="form-group">
+                    <label>Intern *</label>
+                    <select id="m-intern"></select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="m-description" rows="3"></textarea>
+            </div>
+
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>Objective</label>
+                    <input id="m-objective">
+                </div>
+                <div class="form-group">
+                    <label>Skills</label>
+                    <input id="m-skills">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Progress (%)</label>
+                <input type="number" id="m-progress" min="0" max="100" value="0">
+            </div>
+
+            <h4 class="section-title">Timeline</h4>
+            <div id="timelineBuilder" class="builder-box"></div>
+            <button onclick="addTimelineEntry()" class="btn-add-row">+ Add Milestone</button>
+
+            <h4 class="section-title">Documents</h4>
+            <div id="docsBuilder" class="builder-box"></div>
+            <button onclick="addDocEntry()" class="btn-add-row">+ Add Document</button>
+
+            <h4 class="section-title">Videos</h4>
+            <div id="videosBuilder" class="builder-box"></div>
+            <button onclick="addVideoEntry()" class="btn-add-row">+ Add Video</button>
+
+        </div>
+
+        <div class="modal-footer">
+            <button onclick="savePlan()" class="btn-primary">Save</button>
+            <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal-wide { width: 900px; max-height: 90vh; overflow-y: auto; }
+.section-title { margin:20px 0 10px; font-size:16px; font-weight:600; color:var(--fpt-blue); }
+.builder-box { background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:8px; min-height:55px;}
+.builder-item { display:grid; grid-template-columns:150px 1fr 40px; gap:10px; background:white; border:1px solid #e5e7eb; padding:10px; border-radius:6px; margin-bottom:10px; }
+.btn-remove { background:#dc2626; color:white; border:none; border-radius:6px; cursor:pointer; }
+.empty-text { color:#9ca3af; font-size:13px; text-align:center; }
+</style>
+
+<script>
+let role = localStorage.getItem("role");       // INTERN / ADMIN
+let current_intern_id = localStorage.getItem("intern_id"); // set after login
+let editingID = null;
+
+let internsMap = {};
+let usersMap = {};
+let timelineEntries = [];
+let docEntries = [];
+let videoEntries = [];
+
+// ======================== AUTH HEADER =======================
+function getHeaders() {
+    return {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + localStorage.getItem("token")
+    };
+}
+
+// ======================== INIT ==============================
+async function init() {
+    await loadInternOptions();
+    await loadUsers();
+    await loadPlans();
+
+    /** INTERN → ẨN FILTER + ẨN ADD PLAN + ẨN DROPDOWN INTERN */
+    if (role === "INTERN") {
+        document.getElementById("filterRow").style.display = "none";
+        document.getElementById("btnAddPlan").style.display = "none";
+
+        document.getElementById("m-intern").disabled = true;
+    }
+}
+
+init();
+
+// ======================== LOAD INTERN OPTIONS ======================
+async function loadInternOptions() {
+    const r = await fetch("/api/interns/", { headers: getHeaders() });
+    const data = await r.json();
+
+    const mIntern = document.getElementById("m-intern");
+    const filterIntern = document.getElementById("filterIntern");
+
+    mIntern.innerHTML = "";
+    filterIntern.innerHTML = `<option value="">Intern (All)</option>`;
+
+    data.forEach(i => {
+        internsMap[i.id] = i.name;
+        mIntern.innerHTML += `<option value="${String(i.id)}">${i.name}</option>`;
+        filterIntern.innerHTML += `<option value="${String(i.id)}">${i.name}</option>`;
+    });
+}
+
+// ======================== LOAD USERS ======================
+async function loadUsers() {
+    const r = await fetch("/api/users/", { headers: getHeaders() });
+    const data = await r.json();
+    data.forEach(u => usersMap[u.id] = u.username);
+}
+
+// ======================== LOAD PLANS ======================
+async function loadPlans() {
+
+    const r = await fetch("/api/training-plans/", { headers: getHeaders() });
+    let data = await r.json();
+
+    // INTERN → chỉ load kế hoạch của mình
+    if (role === "INTERN") {
+        data = data.filter(p => p.intern_id == current_intern_id);
+    }
+
+    const key = document.getElementById("searchInput").value.toLowerCase();
+    const internFilter = document.getElementById("filterIntern").value;
+
+    data = data.filter(p => 
+        p.title.toLowerCase().includes(key) &&
+        (internFilter === "" || p.intern_id == internFilter)
+    );
+
+    const tbody = document.querySelector("#planTable tbody");
+    tbody.innerHTML = "";
+
+    data.forEach(p => {
+        tbody.innerHTML += `
+        <tr>
+            <td>${p.title}</td>
+            <td>${internsMap[p.intern_id] || "-"}</td>
+            <td>${p.progress}%</td>
+            <td>${usersMap[p.created_by] || "-"}</td>
+            <td>
+                <button class="btn-icon btn-view" onclick="viewDetail(${p.id})"><i class="fa fa-eye"></i></button>
+
+                ${role !== "INTERN" ? `
+                <button class="btn-icon btn-edit" onclick="openEdit(${p.id})"><i class="fa fa-pen"></i></button>
+                <button class="btn-icon btn-delete" onclick="deletePlan(${p.id})"><i class="fa fa-trash"></i></button>
+                ` : ``}
+            </td>
+        </tr>`;
+    });
+}
+
+function viewDetail(id) {
+    window.location.href = `/training-plans/${id}`;
+}
+
+// ======================== OPEN CREATE ======================
+function openCreateModal() {
+    editingID = null;
+    document.getElementById("modalTitle").innerText = "Add Training Plan";
+
+    document.getElementById("m-title").value = "";
+    document.getElementById("m-description").value = "";
+    document.getElementById("m-objective").value = "";
+    document.getElementById("m-skills").value = "";
+    document.getElementById("m-progress").value = 0;
+
+    timelineEntries = [];
+    docEntries = [];
+    videoEntries = [];
+
+    if (role === "INTERN") {
+        document.getElementById("m-intern").value = String(current_intern_id);
+    }
+
+    renderBuilders();
+    document.getElementById("planModal").style.display = "flex";
+}
+
+// ======================== OPEN EDIT ======================
+async function openEdit(id) {
+    editingID = id;
+    const r = await fetch(`/api/training-plans/${id}`, { headers: getHeaders() });
+    const p = await r.json();
+
+    document.getElementById("modalTitle").innerText = "Edit Training Plan";
+
+    document.getElementById("m-title").value = p.title || "";
+    document.getElementById("m-description").value = p.description || "";
+    document.getElementById("m-objective").value = p.objective || "";
+    document.getElementById("m-skills").value = p.skills || "";
+    document.getElementById("m-progress").value = p.progress || 0;
+
+    // 🔥 FIX QUAN TRỌNG → convert sang string
+    document.getElementById("m-intern").value = String(p.intern_id);
+
+    try {
+        timelineEntries = p.timeline ? JSON.parse(p.timeline) : [];
+        const resData = p.resources ? JSON.parse(p.resources) : {};
+        docEntries = resData.docs || [];
+        videoEntries = resData.videos || [];
+    } catch (e) {
+        timelineEntries = [];
+        docEntries = [];
+        videoEntries = [];
+    }
+
+    renderBuilders();
+    document.getElementById("planModal").style.display = "flex";
+}
+
+// ======================== SAVE ======================
+async function savePlan() {
+    const body = {
+        title: document.getElementById("m-title").value.trim(),
+        description: document.getElementById("m-description").value.trim(),
+        objective: document.getElementById("m-objective").value.trim(),
+        skills: document.getElementById("m-skills").value.trim(),
+        progress: parseInt(document.getElementById("m-progress").value),
+        intern_id: parseInt(document.getElementById("m-intern").value),
+        timeline: JSON.stringify(timelineEntries),
+        resources: JSON.stringify({ docs: docEntries, videos: videoEntries }),
+    };
+
+    const url = editingID ? `/api/training-plans/${editingID}` : "/api/training-plans/";
+    const method = editingID ? "PUT" : "POST";
+
+    const r = await fetch(url, {
+        method,
+        headers: getHeaders(),
+        body: JSON.stringify(body)
+    });
+
+    if (!r.ok) return alert("Error saving");
+
+    alert("Saved!");
+    closeModal();
+    loadPlans();
+}
+
+// ======================== DELETE ======================
+async function deletePlan(id) {
+    if (!confirm("Delete?")) return;
+    await fetch(`/api/training-plans/${id}`, {
+        method: "DELETE",
+        headers: getHeaders()
+    });
+    loadPlans();
+}
+
+// ======================== RENDER UI ======================
+function closeModal() {
+    document.getElementById("planModal").style.display = "none";
+}
+
+function renderBuilders() {
+    renderTimeline();
+    renderDocs();
+    renderVideos();
+}
+
+function renderTimeline() {
+    const box = document.getElementById("timelineBuilder");
+    if (timelineEntries.length === 0) {
+        box.innerHTML = `<div class="empty-text">No timeline entries</div>`;
+        return;
+    }
+
+    box.innerHTML = timelineEntries.map((e, i) => `
+        <div class="builder-item">
+            <input type="date" value="${e.date || ""}" onchange="timelineEntries[${i}].date=this.value"/>
+            <div class="builder-fields">
+                <input value="${e.title || ""}" placeholder="Title" 
+                    onchange="timelineEntries[${i}].title=this.value">
+                <input value="${e.note || ""}" placeholder="Note" 
+                    onchange="timelineEntries[${i}].note=this.value">
+            </div>
+            <button class="btn-remove" onclick="timelineEntries.splice(${i},1);renderTimeline()">×</button>
+        </div>
+    `).join("");
+}
+
+function renderDocs() {
+    const box = document.getElementById("docsBuilder");
+    if (docEntries.length === 0) {
+        box.innerHTML = `<div class="empty-text">No documents</div>`;
+        return;
+    }
+
+    box.innerHTML = docEntries.map((e, i) => `
+        <div class="builder-item" style="grid-template-columns:1fr 40px;">
+            <input value="${e}" onchange="docEntries[${i}]=this.value">
+            <button class="btn-remove" onclick="docEntries.splice(${i},1);renderDocs()">×</button>
+        </div>
+    `).join("");
+}
+
+function renderVideos() {
+    const box = document.getElementById("videosBuilder");
+    if (videoEntries.length === 0) {
+        box.innerHTML = `<div class="empty-text">No videos</div>`;
+        return;
+    }
+
+    box.innerHTML = videoEntries.map((e, i) => `
+        <div class="builder-item" style="grid-template-columns:1fr 40px;">
+            <input value="${e}" onchange="videoEntries[${i}]=this.value">
+            <button class="btn-remove" onclick="videoEntries.splice(${i},1);renderVideos()">×</button>
+        </div>
+    `).join("");
+}
+
+function addTimelineEntry() {
+    timelineEntries.push({ date: "", title: "", note: "" });
+    renderTimeline();
+}
+function addDocEntry() {
+    docEntries.push("");
+    renderDocs();
+}
+function addVideoEntry() {
+    videoEntries.push("");
+    renderVideos();
+}
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,31 @@
+<div class="header">
+    <h1>
+        <i class="fa-solid fa-gauge"></i>
+        {{ page_title or title or "Dashboard" }}
+    </h1>
+
+    <div class="user-info">
+
+        <div class="notif-bell" id="notifBell">
+            <i class="fa-solid fa-bell"></i>
+            <span class="notif-dot" id="notifCount"></span>
+        </div>
+
+        <div class="user-dropdown">
+            <div class="user-avatar" id="userAvatar">
+            {{ current_user.username[0] | upper if current_user else "?" }}
+            </div>
+
+            <div class="dropdown-menu" id="dropdownMenu">
+                <a href="/profile"><i class="fa-solid fa-user"></i> Profile</a>
+                <a href="/settings"><i class="fa-solid fa-gear"></i> Settings</a>
+                <a href="#" class="logout" onclick="handleLogout(); return false;">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="notif-panel" id="notifPanel"></div>

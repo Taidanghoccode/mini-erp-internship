@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% set page_title = "User Detail" %}
+{% block content %}
+<div class="header">
+  <h1><i class="fa-solid fa-user"></i> User Detail</h1>
+</div>
+
+{% if user %}
+<div class="card">
+  <p><strong>Username:</strong> {{ user.username }}</p>
+  <p><strong>Email:</strong> {{ user.email }}</p>
+  <p><strong>Role:</strong> {{ user.role_name or "-" }}</p>
+  <p><strong>Status:</strong> {{ "Active" if user.is_active else "Inactive" }}</p>
+  <p><strong>Created:</strong> {{ user.created_at }}</p>
+</div>
+{% else %}
+<p style="padding:20px;color:#888;">User not found.</p>
+{% endif %}
+{% endblock %}

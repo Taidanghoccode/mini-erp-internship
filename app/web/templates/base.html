@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8" />
+   <title>Mini ERP Internship</title>
+
+   <link rel="stylesheet" href="{{ url_for('web_bp.static', filename='css/style.css') }}">
+   <link rel="stylesheet" 
+         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+
+<body>
+    <div class="sidebar">
+        <h2>Mini ERP</h2>
+
+        <div class="menu">
+            <a id="menu-dashboard" href="/" class="{% if request.path == '/' %}active{% endif %}">
+                <i class="fa-solid fa-gauge"></i> Dashboard
+            </a>
+            <a id="menu-interns" href="/interns" class="{% if 'interns' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-user-graduate"></i> Interns
+            </a>
+            <a id="menu-projects" href="/projects" class="{% if 'projects' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-diagram-project"></i> Projects
+            </a>
+            <a id="menu-feedback" href="/feedbacks" class="{% if 'feedbacks' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-comments"></i> Feedback
+            </a>
+            <a id="menu-training" href="/training-plans" class="{% if 'training-plans' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-chalkboard-teacher"></i> Training Plans
+            </a>
+            <a id="menu-reports" href="/report" class="{% if 'report' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-chart-line"></i> Reports
+            </a>
+            <a id="menu-users" href="/users" class="{% if 'users' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-users"></i> Users
+            </a>
+            <a id="menu-roles" href="/roles" class="{% if 'roles' in request.path %}active{% endif %}">
+                <i class="fa-solid fa-shield-halved"></i> Roles & Permissions
+            </a>
+        </div>
+    </div>
+
+    <div class="main-container">
+        {% include "header.html" %}
+        {% block content %}{% endblock %}
+    </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    checkLogin();
+    applyMenuPermissions();
+    initHeaderDropdown();
+    loadNotifications();
+    setInterval(loadNotifications, 5000);
+});
+
+/* Login check */
+function checkLogin() {
+    if (!window.location.pathname.startsWith("/login")) {
+        const token = localStorage.getItem("token");
+        if (!token) window.location.href = "/login";
+    }
+}
+
+/* Menu permission */
+function applyMenuPermissions() {
+    const perms = JSON.parse(localStorage.getItem("permissions") || "[]");
+
+    const menuRules = [
+        { id: "menu-interns", perm: "INTERN_VIEW" },
+        { id: "menu-projects", perm: "PROJECT_VIEW" },
+        { id: "menu-feedback", perm: "FEEDBACK_VIEW" },
+        { id: "menu-training", perm: "TRAININGPLAN_VIEW" },
+        { id: "menu-reports", perm: "VIEW_REPORT" },
+        { id: "menu-users", perm: "USER_MANAGE" },
+        { id: "menu-roles", perm: "ROLE_MANAGE" }
+    ];
+
+    menuRules.forEach(rule => {
+        const item = document.getElementById(rule.id);
+        if (item && !perms.includes(rule.perm)) {
+            item.style.display = "none";
+        }
+    });
+}
+
+/* Dropdown logic */
+function initHeaderDropdown() {
+    const avatar = document.getElementById("userAvatar");
+    const menu = document.getElementById("dropdownMenu");
+    const bell = document.getElementById("notifBell");
+    const notif = document.getElementById("notifPanel");
+
+    if (!avatar || !menu) return;
+
+    avatar.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menu.classList.toggle("show");
+        notif.classList.remove("open");
+    });
+
+    bell.addEventListener("click", (e) => {
+        e.stopPropagation();
+        notif.classList.toggle("open");
+        menu.classList.remove("show");
+    });
+
+    document.addEventListener("click", () => {
+        menu.classList.remove("show");
+        notif.classList.remove("open");
+    });
+
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    notif.addEventListener("click", (e) => e.stopPropagation());
+}
+
+/* Load Notifications */
+async function loadNotifications() {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+        const res = await fetch("/api/notifications?unread=true", {
+            headers: { "Authorization": "Bearer " + token }
+        });
+
+        if (!res.ok) return;
+
+        const items = await res.json();
+        const panel = document.getElementById("notifPanel");
+        const count = document.getElementById("notifCount");
+
+        panel.innerHTML = "";
+
+        if (!items.length) {
+            count.style.display = "none";
+            panel.innerHTML = "<div class='notif-empty'>No notifications</div>";
+            return;
+        }
+
+        count.style.display = "block";
+        count.textContent = items.length;
+
+        items.forEach(n => {
+            panel.innerHTML += `
+                <div class="notif-item">
+                    <div class="notif-title">${n.title}</div>
+                    <div class="notif-msg">${n.message}</div>
+                    <div class="notif-time">${n.created_at}</div>
+                </div>
+            `;
+        });
+
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function handleLogout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("permissions");
+    window.location.href = "/login";
+}
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const token = localStorage.getItem("token");
+    if (token) {
+        fetch(window.location.href, {
+            headers: { "Authorization": "Bearer " + token }
+        });
+    }
+});
+</script>
+</body>
+</html>

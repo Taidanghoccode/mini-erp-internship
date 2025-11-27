@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% set page_title = "Interns" %}
+{% block content %}
+
+<style>
+#toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 99999 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.toast-msg {
+    padding: 12px 16px;
+    border-radius: 8px;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: var(--shadow-md);
+    animation: fadein .2s ease, fadeout .3s ease 2.5s forwards;
+}
+.toast-success { background: #16a34a; }
+.toast-error { background: #dc2626; }
+.toast-info { background: #2563eb; }
+
+@keyframes fadein { from { opacity: 0; transform: translateY(-8px);} to { opacity: 1;} }
+@keyframes fadeout { from { opacity: 1;} to { opacity: 0; transform: translateY(-8px);} }
+
+.modal { z-index: 5000 !important; }
+</style>
+
+<div id="toast"></div>
+
+<div class="header">
+    <h1><i class="fa-solid fa-user-graduate"></i> Interns</h1>
+    <div class="filter-row">
+        <input id="searchInput" placeholder="Search name...">
+        <select id="filterMajor">
+            <option value="">Major (All)</option>
+            <option>IT</option>
+            <option>Business</option>
+            <option>Design</option>
+        </select>
+        <button onclick="loadInterns()" class="btn-primary">Search</button>
+        <button onclick="openCreateModal()" class="btn-success">
+            <i class="fa fa-plus"></i> Add Intern
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <table id="internTable">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>University</th>
+                <th>Major</th>
+                <th>Projects</th>
+                <th>Rating</th>
+                <th width="120px">Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<!-- Modal -->
+<div class="modal" id="internModal">
+    <div class="modal-content">
+        <h3 id="modalTitle">Add Intern</h3>
+
+        <input id="m-name" placeholder="Name" oninput="validateNameLive()">
+        <input id="m-email" placeholder="Email" oninput="validateEmailLive()">
+        <input id="m-university" placeholder="University">
+        <input id="m-major" placeholder="Major">
+
+        <!-- Linked User -->
+        <select id="m-user" style="margin-top:10px;">
+            <option value="">-- No linked user --</option>
+        </select>
+
+        <button onclick="saveIntern()" class="btn-success" style="width:100%; margin-top:10px;">Save</button>
+        <button onclick="closeModal()" class="btn-danger" style="width:100%; margin-top:10px;">Cancel</button>
+    </div>
+</div>
+
+<script>
+function showToast(msg, type="success"){
+    const box = document.getElementById("toast");
+    const div = document.createElement("div");
+    div.className = `toast-msg toast-${type}`;
+    div.innerHTML = msg;
+    box.appendChild(div);
+    setTimeout(()=> div.remove(), 3000);
+}
+
+function escapeHtml(text) {
+    if (!text) return "";
+    return text.replace(/&/g, "&amp;")
+               .replace(/</g, "&lt;")
+               .replace(/>/g, "&gt;")
+               .replace(/"/g, "&quot;")
+               .replace(/'/g, "&#039;");
+}
+
+let editingID = null;
+
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validateEmailLive() {
+    const email = document.getElementById("m-email").value.trim();
+    const input = document.getElementById("m-email");
+    if (!email) { input.style.border = "1px solid #ddd"; return; }
+
+    if (!validateEmail(email)) {
+        input.style.border = "1px solid #dc2626";
+        showToast("Invalid email format", "error");
+    } else {
+        input.style.border = "1px solid #16a34a";
+    }
+}
+
+function validateNameLive() {
+    const name = document.getElementById("m-name").value.trim();
+    const input = document.getElementById("m-name");
+    if (!name) {
+        input.style.border = "1px solid #dc2626";
+        showToast("Name is required", "error");
+    } else {
+        input.style.border = "1px solid #16a34a";
+    }
+}
+
+// ---------------- LOAD INTERNS ----------------
+async function loadInterns() {
+    try {
+        const res = await fetch("/api/interns/");
+        const data = await res.json();
+
+        if (!res.ok) {
+            showToast("Error loading interns", "error");
+            return;
+        }
+
+        let interns = data;
+        const keyword = document.getElementById("searchInput").value.toLowerCase();
+        const majorFilter = document.getElementById("filterMajor").value;
+
+        interns = interns.filter(i =>
+            i.name.toLowerCase().includes(keyword) &&
+            (majorFilter === "" || i.major === majorFilter)
+        );
+
+        const tbody = document.querySelector("#internTable tbody");
+        tbody.innerHTML = "";
+
+        interns.forEach(i => {
+            const name = escapeHtml(i.name);
+            const email = escapeHtml(i.email);
+            const uni = escapeHtml(i.university || "-");
+            const major = escapeHtml(i.major || "-");
+            const userIdExpr = (i.user_id ?? "null");   // số hoặc "null"
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${name}</td>
+                    <td>${email}</td>
+                    <td>${uni}</td>
+                    <td>${major}</td>
+                    <td>${i.project_count || 0}</td>
+                    <td>${i.avg_rating ?? "-"}</td>
+                    <td>
+                        <button class="btn-icon btn-view" onclick="viewDetail(${i.id})">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                        <button class="btn-icon btn-edit"
+                            onclick="openEdit(${i.id}, '${name}', '${email}', '${uni}', '${major}', ${userIdExpr})">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button class="btn-icon btn-delete" onclick="deleteIntern(${i.id})">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>`;
+        });
+
+    } catch (err) {
+        showToast("Connection error!", "error");
+    }
+}
+
+function viewDetail(id) {
+    window.location.href = `/interns/${id}`;
+}
+
+// --------------- LOAD USERS FOR DROPDOWN ----------------
+async function loadUsersForIntern(currentUserId = null) {
+    const sel = document.getElementById("m-user");
+    sel.innerHTML = `<option value="">-- No linked user --</option>`;
+
+    try {
+        // Bạn có thể đổi lại thành /api/users?role=INTERN tuỳ BE
+        const res = await fetch("/api/users/");
+        const users = await res.json();
+
+        if (!res.ok) {
+            showToast(users.error || "Error loading users", "error");
+            return;
+        }
+
+        users.forEach(u => {
+            sel.innerHTML += `<option value="${u.id}">${escapeHtml(u.username)} (${escapeHtml(u.email)})</option>`;
+        });
+
+        if (currentUserId) {
+            sel.value = String(currentUserId);
+
+            // nếu vì lý do nào đó user không có trong list, thì thêm tay
+            if (sel.value === "") {
+                const u = users.find(x => x.id === currentUserId);
+                if (u) {
+                    sel.innerHTML += `<option value="${u.id}">${escapeHtml(u.username)} (${escapeHtml(u.email)})</option>`;
+                    sel.value = String(u.id);
+                } else {
+                    sel.innerHTML += `<option value="${currentUserId}">User #${currentUserId}</option>`;
+                    sel.value = String(currentUserId);
+                }
+            }
+        }
+
+    } catch (err) {
+        showToast("Error loading users", "error");
+    }
+}
+
+// ---------------- MODAL HANDLING ----------------
+function openCreateModal() {
+    editingID = null;
+    document.getElementById("modalTitle").innerText = "Add Intern";
+
+    document.getElementById("m-name").value = "";
+    document.getElementById("m-email").value = "";
+    document.getElementById("m-university").value = "";
+    document.getElementById("m-major").value = "";
+
+    loadUsersForIntern(null);
+
+    document.getElementById("internModal").style.display = "flex";
+}
+
+function openEdit(id, name, email, uni, major, userId) {
+    editingID = id;
+
+    document.getElementById("modalTitle").innerText = "Edit Intern";
+    document.getElementById("m-name").value = name;
+    document.getElementById("m-email").value = email;
+    document.getElementById("m-university").value = uni;
+    document.getElementById("m-major").value = major;
+
+    loadUsersForIntern(userId);   // 🔥 pre-select linked user
+
+    document.getElementById("internModal").style.display = "flex";
+}
+
+function closeModal() {
+    document.getElementById("internModal").style.display = "none";
+}
+
+// ---------------- SAVE / DELETE ----------------
+async function saveIntern() {
+    const body = {
+        name: document.getElementById("m-name").value.trim(),
+        email: document.getElementById("m-email").value.trim(),
+        university: document.getElementById("m-university").value.trim(),
+        major: document.getElementById("m-major").value.trim(),
+        user_id: document.getElementById("m-user").value || null
+    };
+
+    if (!body.name) {
+        showToast("Name is required", "error");
+        return;
+    }
+    if (!validateEmail(body.email)) {
+        showToast("Invalid email format", "error");
+        return;
+    }
+
+    let res;
+
+    try {
+        if (editingID == null) {
+            res = await fetch("/api/interns/", {
+                method: "POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify(body)
+            });
+        } else {
+            res = await fetch(`/api/interns/${editingID}`, {
+                method: "PUT",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify(body)
+            });
+        }
+
+        const result = await res.json();
+
+        if (!res.ok) {
+            showToast(result.error || "Save failed", "error");
+            return;
+        }
+
+        showToast("Saved successfully!", "success");
+        closeModal();
+        loadInterns();
+
+    } catch (err) {
+        showToast("Connection error", "error");
+    }
+}
+
+async function deleteIntern(id) {
+    if (!confirm("Delete this intern?")) return;
+
+    try {
+        const res = await fetch(`/api/interns/${id}`, { method:"DELETE" });
+
+        if (!res.ok) {
+            const err = await res.json();
+            showToast(err.error || "Delete failed", "error");
+            return;
+        }
+
+        showToast("Deleted successfully", "info");
+        loadInterns();
+
+    } catch (err) {
+        showToast("Connection error", "error");
+    }
+}
+
+loadInterns();
+</script>
+
+{% endblock %}
