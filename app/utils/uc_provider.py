@@ -19,6 +19,8 @@ from app.repo.project_repo import ProjectRepo
 from app.repo.intern_project_repo import InternProjectRepo
 from app.repo.training_plan_repo import TrainingPlanRepo
 from app.repo.activitylog_repo import ActivityLogRepo
+from app.repo.notification_repo import NotificationRepo
+from app.utils.mail_service import MailService
 
 def provide_user_uc():
     return UserUC(
@@ -45,19 +47,28 @@ def provide_permission_uc():
 
 
 def provide_feedback_uc():
+    
     return FeedbackUC(
         feedback_repo=FeedbackRepo(),
-        permission_repo=PermissionRepo(),
-        activitylog_uc=ActivityLogUC()
+        notification_repo=NotificationRepo(),
+        intern_repo=InternRepo(),
+        project_repo=ProjectRepo(),
+        user_repo=UserRepo(),
+        mail_service=MailService(),
+        permission_repo=PermissionRepo()
+
     )
 
 
 def provide_intern_uc():
     return InternUC(
         intern_repo=InternRepo(),
-        intern_project_repo=InternProjectRepo(),
-        activitylog_uc=ActivityLogUC()
+        user_repo=UserRepo(),
+        permission_repo=PermissionRepo(),
+        activitylog_uc=ActivityLogUC(),
+        mail_service=MailService()
     )
+
 
 
 def provide_project_uc():
@@ -94,9 +105,12 @@ def provide_training_plan_uc():
     )
 def provide_auth_uc():
     return AuthUC(
-        user_repo=UserRepo(), 
-        permission_repo= PermissionRepo()
+        user_repo=UserRepo(),
+        permission_repo=PermissionRepo(),
+        activitylog_uc=ActivityLogUC(),
+        mail_service=MailService()
     )
+
 
 def provide_activitylog_uc():
     return ActivityLogUC(ActivityLogRepo())

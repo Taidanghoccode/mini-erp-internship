@@ -3,428 +3,367 @@
 {% block content %}
 
 <style>
-  .layout { display:grid; grid-template-columns: 1.2fr 2fr; gap:20px; }
-  .panel { background:#fff; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); padding:16px; }
-  .panel h2 { font-size:18px; margin-bottom:12px; color: var(--fpt-blue); display:flex; justify-content:space-between; align-items:center; }
-  .list { border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; }
-  .list-item { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #f1f5f9; background:#fff; }
-  .list-item.active { background:#f8fbff; }
-  .list-item:last-child { border-bottom:none; }
-  .muted { color:#6b7280; font-size:12px; }
-  .badge { background:#eef2ff; color:#3b5bdb; border-radius:999px; padding:2px 8px; font-size:12px; }
-  .badge.protected { background:#fef3c7; color:#92400e; }
-  .grid-perms { display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-top:10px; }
-  .perm { display:flex; align-items:center; justify-content:space-between; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; }
-  .hdr { display:flex; gap:10px; align-items:center; }
-  .search { display:flex; gap:8px; margin-bottom:10px; }
-  .search input { flex:1; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; }
-  .btn { padding:9px 14px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
-  .btn.blue { background: var(--fpt-blue); color:#fff; }
-  .btn.red { background:#dc2626; color:#fff; }
-  .btn.gray { background:#f3f4f6; color:#111827; }
-  .btn:disabled { opacity:0.5; cursor:not-allowed; }
-  .row-actions { display:flex; gap:6px; }
-  .role-head { display:flex; align-items:center; gap:8px; }
-  .role-name { font-weight:600; color:#111827; }
-  .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color:#334155; background:#f1f5f9; padding:2px 6px; border-radius:6px; font-size:12px; }
+    #toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .toast-msg {
+        padding: 12px 16px;
+        border-radius: 8px;
+        color: #fff;
+        font-weight: 600;
+        box-shadow: var(--shadow-md);
+        animation: fadein .2s ease, fadeout .3s ease 2.5s forwards;
+    }
+    .toast-success { background:#16a34a; }
+    .toast-error { background:#dc2626; }
+    .toast-info { background:#2563eb; }
 
-  .modal { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.35); z-index:1000; }
-  .modal.show { display:grid; }
-  .modal-card { width:min(480px, 92vw); background:#fff; border-radius:14px; box-shadow: var(--shadow-lg); padding:16px; display:flex; flex-direction:column; gap:10px; }
-  .modal-card input, .modal-card textarea { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; }
-  .modal-actions { display:flex; justify-content:flex-end; gap:8px; }
+    @keyframes fadein { from{opacity:0; transform:translateY(-8px);} to{opacity:1;} }
+    @keyframes fadeout { from{opacity:1;} to{opacity:0; transform:translateY(-8px);} }
 
-  .perm-head { display:flex; align-items:center; gap:10px; margin-top:6px; }
-  .toggle { width:42px; height:24px; background:#e5e7eb; border-radius:999px; position:relative; cursor:pointer; }
-  .toggle::after { content:""; position:absolute; top:3px; left:3px; width:18px; height:18px; background:#fff; border-radius:50%; transition: .15s; }
-  .toggle.on { background: var(--fpt-blue); }
-  .toggle.on::after { transform: translateX(18px); }
-
-  #toast {
-    position: fixed;
-    top: 20px; 
-    right: 20px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .toast-msg {
-    padding: 12px 16px;
-    border-radius: 8px;
-    color: #fff;
-    font-weight: 600;
-    box-shadow: var(--shadow-md);
-    animation: fadein .3s ease, fadeout .3s ease 2.7s forwards;
-  }
-
-  .toast-success { background: #16a34a; }
-  .toast-error { background: #dc2626; }
-  .toast-info { background: #2563eb; }
-
-  @keyframes fadein { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0);} }
-  @keyframes fadeout { from { opacity: 1;} to { opacity: 0; transform: translateY(-8px);} }
-
-  .btn-icon { width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; }
+    .modal { z-index:5000 !important; }
 </style>
 
 <div id="toast"></div>
 
 <div class="header">
-  <h1><i class="fa-solid fa-shield-halved"></i> Roles & Permissions</h1>
-  <div class="hdr">
-    <button class="btn blue" onclick="openCreateRole()"><i class="fa-solid fa-plus"></i> New Role</button>
-    <button class="btn blue" onclick="openCreatePerm()"><i class="fa-solid fa-key"></i> New Permission</button>
-  </div>
+    <h1><i class="fa-solid fa-shield-halved"></i> Roles & Permissions</h1>
+
+    <div class="filter-row">
+        <button onclick="openCreateRoleModal()" class="btn-success">
+            <i class="fa fa-plus"></i> Add Role
+        </button>
+
+        <button onclick="openCreatePermModal()" class="btn-success">
+            <i class="fa fa-key"></i> Add Permission
+        </button>
+    </div>
 </div>
 
-<div class="layout">
-  <div class="panel">
-    <h2>Roles</h2>
-    <div class="search">
-      <input id="qRole" placeholder="Search by name/code...">
-      <button class="btn gray" onclick="renderRoles()"><i class="fa-solid fa-search"></i> Search</button>
-    </div>
-    <div id="roleList" class="list"></div>
-  </div>
+<div class="card" style="display:flex; gap:24px; align-items:flex-start;">
+    <div style="flex:1;">
+        <h3 style="margin-bottom:10px;">Roles</h3>
 
-  <div class="panel">
-    <h2 id="detailTitle">Role Details</h2>
-    <div id="roleDetail" class="muted">Select a role to manage permissions.</div>
-  </div>
+        <table id="roleTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th width="120px">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="roleBody"></tbody>
+        </table>
+    </div>
+
+    <div style="flex:1;">
+
+        <div class="filter-row" style="margin-bottom:10px;">
+            <input id="permSearch" placeholder="Search permission..." oninput="renderPermissionsForCurrent()">
+        </div>
+
+        <table id="permTable">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Assigned</th>
+                    <th width="120px">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="permBody"></tbody>
+        </table>
+    </div>
 </div>
 
-<div id="modalRole" class="modal">
-  <div class="modal-card">
-    <h3 id="roleModalTitle"></h3>
-    <input id="roleName" placeholder="Role name (e.g. Project Manager)">
-    <input id="roleCode" placeholder="Role code (e.g. PROJECT_MANAGER)">
-    <textarea id="roleDesc" placeholder="Description" rows="3"></textarea>
-    <div class="modal-actions">
-      <button class="btn gray" onclick="closeRole()">Cancel</button>
-      <button class="btn blue" onclick="saveRole()">Save</button>
+<!-- Role Modal -->
+<div class="modal" id="roleModal">
+    <div class="modal-content">
+        <h3 id="roleModalTitle">Add Role</h3>
+
+        <input id="roleName" placeholder="Role name">
+        <input id="roleCode" placeholder="Role code">
+        <textarea id="roleDesc" placeholder="Description" rows="3"></textarea>
+
+        <button onclick="saveRole()" class="btn-success" style="width:100%; margin-top:10px;">Save</button>
+        <button onclick="closeRoleModal()" class="btn-danger" style="width:100%; margin-top:10px;">Cancel</button>
     </div>
-  </div>
 </div>
 
-<div id="modalPerm" class="modal">
-  <div class="modal-card">
-    <h3 id="permModalTitle"></h3>
-    <input id="permName" placeholder="Permission name (e.g. View Roles)">
-    <input id="permCode" placeholder="Permission code (e.g. VIEW_ROLES)">
-    <textarea id="permDesc" placeholder="Description" rows="3"></textarea>
-    <div class="modal-actions">
-      <button class="btn gray" onclick="closePerm()">Cancel</button>
-      <button class="btn blue" onclick="savePerm()">Save</button>
+<!-- Permission Modal -->
+<div class="modal" id="permModal">
+    <div class="modal-content">
+        <h3 id="permModalTitle">Add Permission</h3>
+
+        <input id="permName" placeholder="Permission name">
+        <input id="permCode" placeholder="Permission code">
+        <textarea id="permDesc" placeholder="Description" rows="3"></textarea>
+
+        <button onclick="savePerm()" class="btn-success" style="width:100%; margin-top:10px;">Save</button>
+        <button onclick="closePermModal()" class="btn-danger" style="width:100%; margin-top:10px;">Cancel</button>
     </div>
-  </div>
 </div>
 
 <script>
-function showToast(msg, type="success") {
-  const box = document.getElementById("toast");
-  const div = document.createElement("div");
-  div.className = `toast-msg toast-${type}`;
-  div.innerHTML = `<i class="fa-solid fa-${type==='success'?'check-circle':type==='error'?'exclamation-circle':'info-circle'}"></i> ${msg}`;
-  box.appendChild(div);
-  setTimeout(()=> div.remove(), 3000);
+function showToast(msg, type="success"){
+    const box=document.getElementById("toast");
+    const div=document.createElement("div");
+    div.className=`toast-msg toast-${type}`;
+    div.innerHTML=msg;
+    box.appendChild(div);
+    setTimeout(()=>div.remove(),3000);
 }
 
-const el = id => document.getElementById(id);
 const api = {
-  roles: "/api/roles/",
-  role: id => `/api/roles/${id}`,
-  perms: "/api/permissions/",
-  perm: id => `/api/permissions/${id}`,
-  rpAssign: (rid,pid) => `/api/roles/${rid}/permissions/${pid}`
+    roles:"/api/roles/",
+    role:id=>`/api/roles/${id}`,
+    perms:"/api/permissions/",
+    perm:id=>`/api/permissions/${id}`,
+    rpAssign:(roleId,permId)=>`/api/roles/${roleId}/permissions/${permId}`
 };
 
-const PROTECTED_ROLES = ['ADMIN', 'SUPER_USER', 'SYSTEM_ADMIN'];
+let ROLES=[];
+let PERMS=[];
+let currentRoleId=null;
+let editingRoleId=null;
+let editingPermId=null;
 
-let ROLES = [];
-let PERMS = [];
-let currentRoleId = null;
-let editingRoleId = null;
-let editingPermId = null;
+function authHeader(){
+    return {
+        "Content-Type":"application/json",
+        "Authorization":"Bearer " + localStorage.getItem("token")
+    };
+}
 
-async function safeJson(r){
-  if(!r.ok){
-    let t = await r.text();
-    try {
-      const json = JSON.parse(t);
-      showToast(json.error || json.message || "Request failed", "error");
-    } catch {
-      showToast("Error: " + t, "error");
+async function safeJson(res){
+    if(!res.ok){
+        let d=null;
+        try{ d=await res.json(); }catch(_){}
+        const msg=(d && (d.error || d.message)) || `Failed (${res.status})`;
+        showToast(msg,"error");
+        throw new Error(msg);
     }
-    throw new Error(t);
-  }
-  return r.json();
+    return res.json();
 }
 
 async function loadData(){
-  try {
-    const [roles, perms] = await Promise.all([
-      safeJson(await fetch(api.roles)),
-      safeJson(await fetch(api.perms))
-    ]);
-    ROLES = roles; 
-    PERMS = perms;
-  } catch(e) {
-    console.error("Load data error:", e);
-  }
-}
+    try{
+        const [r,p]=await Promise.all([
+            fetch(api.roles,{headers:authHeader()}),
+            fetch(api.perms,{headers:authHeader()})
+        ]);
 
-function isProtectedRole(code) {
-  return PROTECTED_ROLES.includes(code?.toUpperCase());
+        ROLES=await safeJson(r);
+        PERMS=await safeJson(p);
+        renderRoles();
+        renderPermissionsForCurrent();
+    }catch(e){ console.error(e); }
 }
 
 function renderRoles(){
-  const q = el("qRole").value.trim().toLowerCase();
-  const list = el("roleList");
-  const rows = ROLES.filter(r => !q || r.name.toLowerCase().includes(q) || r.code.toLowerCase().includes(q));
-  
-  if(rows.length === 0) {
-    list.innerHTML = `<div class="list-item"><span class="muted">No roles found</span></div>`;
-    return;
-  }
+    const tbody=document.getElementById("roleBody");
+    tbody.innerHTML="";
 
-  list.innerHTML = rows.map(r => {
-    const isProtected = isProtectedRole(r.code);
-    return `
-    <div class="list-item ${r.id===currentRoleId?'active':''}">
-      <div class="role-head">
-        <span class="role-name">${r.name}</span>
-        <span class="code">${r.code}</span>
-        ${isProtected ? '<span class="badge protected"><i class="fa-solid fa-lock"></i> Protected</span>' : ''}
-      </div>
-      <div class="row-actions">
-        <button class="btn-icon btn" style="background:#e0e7ff; color:var(--fpt-blue);" onclick="selectRole(${r.id})" title="View">
-          <i class="fa-solid fa-eye"></i>
-        </button>
-        <button class="btn-icon btn" style="background:#fef3c7; color:#b45309;" onclick="openEditRole(${r.id})" ${isProtected ? 'disabled title="Protected role"' : 'title="Edit"'}>
-          <i class="fa-solid fa-pen"></i>
-        </button>
-        <button class="btn-icon btn" style="background:#fee2e2; color:#dc2626;" onclick="deleteRole(${r.id})" ${isProtected ? 'disabled title="Protected role"' : 'title="Delete"'}>
-          <i class="fa-solid fa-trash"></i>
-        </button>
-      </div>
-    </div>
-  `}).join("");
-}
-
-function selectRole(id){
-  currentRoleId = id;
-  renderRoles();
-  const r = ROLES.find(x=>x.id===id);
-  if(!r) return;
-
-  const isProtected = isProtectedRole(r.code);
-  el("detailTitle").innerHTML = `${r.name} <span class="code">${r.code}</span> ${isProtected ? '<span class="badge protected"><i class="fa-solid fa-lock"></i> Protected</span>' : ''}`;
-  
-  const set = new Set(r.permissions || []);
-  const body = `
-    <div class="perm-head">
-      <span class="badge"><i class="fa-solid fa-key"></i> ${(r.permissions||[]).length} permissions assigned</span>
-    </div>
-    ${r.description ? `<p style="color:#6b7280; margin:8px 0;">${r.description}</p>` : ''}
-    <div class="grid-perms">
-      ${PERMS.map(p => `
-        <div class="perm">
-          <div>
-            <div><strong>${p.name}</strong></div>
-            <div class="muted">${p.code}</div>
-            ${p.description ? `<div class="muted" style="font-size:11px; margin-top:4px;">${p.description}</div>` : ''}
-          </div>
-          <div class="toggle ${set.has(p.code)?'on':''}" onclick="togglePerm(${r.id}, ${p.id}, this)"></div>
-        </div>
-      `).join("")}
-    </div>
-  `;
-  el("roleDetail").innerHTML = body;
-}
-
-function openCreateRole(){
-  editingRoleId = null;
-  el("roleModalTitle").innerHTML = '<i class="fa-solid fa-plus-circle"></i> Create New Role';
-  el("roleName").value = "";
-  el("roleCode").value = "";
-  el("roleDesc").value = "";
-  el("modalRole").classList.add("show");
-}
-
-function openEditRole(id){
-  const r = ROLES.find(x=>x.id===id);
-  if(!r) return;
-  
-  if(isProtectedRole(r.code)) {
-    showToast("Protected roles cannot be edited", "error");
-    return;
-  }
-
-  editingRoleId = id;
-  el("roleModalTitle").innerHTML = '<i class="fa-solid fa-edit"></i> Edit Role';
-  el("roleName").value = r.name || "";
-  el("roleCode").value = r.code || "";
-  el("roleDesc").value = r.description || "";
-  el("modalRole").classList.add("show");
-}
-
-function closeRole(){ 
-  el("modalRole").classList.remove("show"); 
-}
-
-async function saveRole(){
-  const data = {
-    name: el("roleName").value.trim(),
-    code: el("roleCode").value.trim().toUpperCase(),
-    description: el("roleDesc").value.trim()
-  };
-  
-  if(!data.name || !data.code){
-    showToast("Name and Code are required", "error");
-    return;
-  }
-
-  if(!/^[A-Z_]+$/.test(data.code)) {
-    showToast("Code must contain only uppercase letters and underscores", "error");
-    return;
-  }
-
-  try {
-    if(editingRoleId){
-      await safeJson(await fetch(api.role(editingRoleId), {
-        method:"PUT", 
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-      }));
-      showToast("Role updated successfully");
-    } else {
-      await safeJson(await fetch(api.roles, {
-        method:"POST", 
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(data)
-      }));
-      showToast("Role created successfully");
+    if(ROLES.length===0){
+        tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;color:#6b7280;">No roles found</td></tr>`;
+        return;
     }
 
-    closeRole();
-    await loadData();
+    ROLES.forEach(r=>{
+        tbody.innerHTML+=`
+            <tr ${r.id===currentRoleId ? 'style="background:#f8fafc;"' : ''}>
+                <td>${r.name}</td>
+                <td>${r.code}</td>
+                <td>${r.description||"-"}</td>
+                <td>
+                    <button class="btn-icon btn-view" onclick="viewRole(${r.id})"><i class="fa-solid fa-eye"></i></button>
+                    <button class="btn-icon btn-edit" onclick="openEditRoleModal(${r.id})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icon btn-delete" onclick="deleteRole(${r.id})"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function viewRole(id){
+    currentRoleId=id;
+    const r=ROLES.find(x=>x.id===id);
+    
     renderRoles();
-    if(currentRoleId) selectRole(currentRoleId);
-  } catch(e) {
-    console.error("Save role error:", e);
-  }
+    renderPermissionsForCurrent();
+}
+
+function renderPermissionsForCurrent(){
+    const tbody=document.getElementById("permBody");
+    tbody.innerHTML="";
+
+    if(!currentRoleId){
+        tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;color:#6b7280;">Select a role</td></tr>`;
+        return;
+    }
+
+    const role=ROLES.find(x=>x.id===currentRoleId);
+    const assigned=new Set(role.permissions||[]);
+    const keyword=document.getElementById("permSearch").value.trim().toLowerCase();
+
+    let list=PERMS.filter(p =>
+        !keyword ||
+        p.name.toLowerCase().includes(keyword) ||
+        p.code.toLowerCase().includes(keyword)
+    );
+
+    if(list.length===0){
+        tbody.innerHTML=`<tr><td colspan="4" style="text-align:center;color:#6b7280;">No permissions found</td></tr>`;
+        return;
+    }
+
+    list.forEach(p=>{
+        const checked=assigned.has(p.code)?"checked":"";
+        tbody.innerHTML+=`
+            <tr>
+                <td>${p.name}</td>
+                <td>${p.code}</td>
+                <td style="text-align:center;"><input type="checkbox" ${checked} onchange="toggleRolePermission(${p.id},this.checked)"></td>
+                <td>
+                    <button class="btn-icon btn-edit" onclick="openEditPermModal(${p.id})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icon btn-delete" onclick="deletePerm(${p.id})"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function openCreateRoleModal(){
+    editingRoleId=null;
+    roleName.value="";
+    roleCode.value="";
+    roleDesc.value="";
+    roleModal.style.display="flex";
+}
+
+function openEditRoleModal(id){
+    editingRoleId=id;
+    const r=ROLES.find(x=>x.id===id);
+    roleName.value=r.name;
+    roleCode.value=r.code;
+    roleDesc.value=r.description||"";
+    roleModal.style.display="flex";
+}
+
+function closeRoleModal(){ roleModal.style.display="none"; }
+
+async function saveRole(){
+    const data={
+        name:roleName.value.trim(),
+        code:roleCode.value.trim().toUpperCase(),
+        description:roleDesc.value.trim()
+    };
+    if(!data.name||!data.code){ showToast("Missing field","error"); return; }
+
+    try{
+        const url=editingRoleId ? api.role(editingRoleId) : api.roles;
+        const method=editingRoleId ? "PUT" : "POST";
+
+        const res=await fetch(url,{
+            method, headers:authHeader(), body:JSON.stringify(data)
+        });
+        await safeJson(res);
+
+        showToast(editingRoleId?"Updated":"Created");
+        closeRoleModal();
+        loadData();
+    }catch(e){ console.error(e); }
 }
 
 async function deleteRole(id){
-  const r = ROLES.find(x=>x.id===id);
-  if(!r) return;
-
-  if(isProtectedRole(r.code)) {
-    showToast("Protected roles cannot be deleted", "error");
-    return;
-  }
-
-  if(!confirm(`Are you sure you want to delete role "${r.name}"?\n\nThis action cannot be undone.`)) return;
-  
-  try {
-    await safeJson(await fetch(api.role(id), { method:"DELETE" }));
-    showToast("Role deleted successfully", "info");
-
-    if(currentRoleId===id){
-      currentRoleId=null;
-      el("detailTitle").innerText = "Role Details";
-      el("roleDetail").innerHTML = `<span class="muted">Select a role to manage permissions.</span>`;
-    }
-    await loadData();
-    renderRoles();
-  } catch(e) {
-    console.error("Delete role error:", e);
-  }
+    if(!confirm("Delete this role?")) return;
+    try{
+        const res=await fetch(api.role(id),{ method:"DELETE",headers:authHeader() });
+        await safeJson(res);
+        if(currentRoleId===id) currentRoleId=null;
+        showToast("Deleted","info");
+        loadData();
+    }catch(e){ console.error(e); }
 }
 
-async function togglePerm(roleId, permId, sw){
-  const on = sw.classList.contains("on");
-  
-  try {
-    if(on){
-      await safeJson(await fetch(api.rpAssign(roleId, permId), { method:"DELETE" }));
-      sw.classList.remove("on");
-      showToast("Permission removed", "info");
-    } else {
-      await safeJson(await fetch(api.rpAssign(roleId, permId), { method:"POST" }));
-      sw.classList.add("on");
-      showToast("Permission assigned");
-    }
-
-    const r = await safeJson(await fetch(api.role(roleId)));
-    const idx = ROLES.findIndex(x=>x.id===roleId);
-    if(idx>-1) ROLES[idx]=r;
-    
-    const isProtected = isProtectedRole(r.code);
-    el("detailTitle").innerHTML = `${r.name} <span class="code">${r.code}</span> ${isProtected ? '<span class="badge protected"><i class="fa-solid fa-lock"></i> Protected</span>' : ''}`;
-  } catch(e) {
-    console.error("Toggle permission error:", e);
-  }
+function openCreatePermModal(){
+    editingPermId=null;
+    permName.value="";
+    permCode.value="";
+    permDesc.value="";
+    permModal.style.display="flex";
 }
 
-function openCreatePerm(){
-  editingPermId = null;
-  el("permModalTitle").innerHTML = '<i class="fa-solid fa-plus-circle"></i> Create New Permission';
-  el("permName").value = "";
-  el("permCode").value = "";
-  el("permDesc").value = "";
-  el("modalPerm").classList.add("show");
+function openEditPermModal(id){
+    editingPermId=id;
+    const p=PERMS.find(x=>x.id===id);
+    permName.value=p.name;
+    permCode.value=p.code;
+    permDesc.value=p.description||"";
+    permModal.style.display="flex";
 }
 
-function closePerm(){
-  el("modalPerm").classList.remove("show");
-}
+function closePermModal(){ permModal.style.display="none"; }
 
 async function savePerm(){
-  const data = {
-    name: el("permName").value.trim(),
-    code: el("permCode").value.trim().toUpperCase(),
-    description: el("permDesc").value.trim()
-  };
-  
-  if(!data.name || !data.code){
-    showToast("Name and Code are required", "error");
-    return;
-  }
+    const data={
+        name:permName.value.trim(),
+        code:permCode.value.trim().toUpperCase(),
+        description:permDesc.value.trim()
+    };
+    if(!data.name||!data.code){ showToast("Missing field","error"); return; }
 
-  if(!/^[A-Z_]+$/.test(data.code)) {
-    showToast("Code must contain only uppercase letters and underscores", "error");
-    return;
-  }
+    try{
+        const url=editingPermId ? api.perm(editingPermId) : api.perms;
+        const method=editingPermId ? "PUT" : "POST";
 
-  try {
-    await safeJson(await fetch(api.perms, {
-      method:"POST", 
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(data)
-    }));
-    showToast("Permission created successfully");
-    closePerm();
-    await loadData();
-  } catch(e) {
-    console.error("Save permission error:", e);
-  }
+        const res=await fetch(url,{
+            method, headers:authHeader(), body:JSON.stringify(data)
+        });
+        await safeJson(res);
+
+        showToast(editingPermId?"Updated":"Created");
+        closePermModal();
+        loadData();
+    }catch(e){ console.error(e); }
 }
 
-(async function init(){
-  await loadData();
-  renderRoles();
-})();
+async function deletePerm(id){
+    if(!confirm("Delete this permission?")) return;
+    try{
+        const res=await fetch(api.perm(id),{ method:"DELETE",headers:authHeader() });
+        await safeJson(res);
+        showToast("Deleted","info");
+        loadData();
+    }catch(e){ console.error(e); }
+}
 
-document.getElementById("modalRole").addEventListener("click", function(e) {
-  if(e.target === this) closeRole();
-});
+async function toggleRolePermission(permId,checked){
+    if(!currentRoleId){ showToast("Select role","error"); return; }
 
-document.getElementById("modalPerm").addEventListener("click", function(e) {
-  if(e.target === this) closePerm();
-});
+    try{
+        const method=checked?"POST":"DELETE";
+        const res=await fetch(api.rpAssign(currentRoleId,permId),{ method,headers:authHeader() });
+        await safeJson(res);
+
+        const r=await fetch(api.role(currentRoleId),{headers:authHeader()});
+        const update=await safeJson(r);
+        const idx=ROLES.findIndex(x=>x.id===currentRoleId);
+        ROLES[idx]=update;
+
+        showToast(checked?"Assigned":"Removed");
+        renderPermissionsForCurrent();
+    }catch(e){ console.error(e); }
+}
+
+loadData();
 </script>
 
 {% endblock %}

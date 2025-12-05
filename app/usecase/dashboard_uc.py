@@ -24,7 +24,7 @@ class DashboardUC:
     def get_summary(self):
         interns = self.intern_repo.get_all()
         projects = self.project_repo.get_all()
-        feedbacks = self.feedback_repo.get_all()
+        feedbacks = self.feedback_repo.get_all()  # đã filter is_deleted=False
         users = self.user_repo.get_all()
 
         return {
@@ -35,7 +35,7 @@ class DashboardUC:
         }
 
     def get_intern_performance(self):
-        feedbacks = self.feedback_repo.get_all()
+        feedbacks = self.feedback_repo.get_all()  # all đều chưa deleted
         interns = self.intern_repo.get_all()
 
         intern_rating_map = {}
@@ -69,9 +69,8 @@ class DashboardUC:
             "low_interns": sorted_interns[-5:],
         }
 
-
     def get_project_quality(self):
-        feedbacks = self.feedback_repo.get_all()
+        feedbacks = self.feedback_repo.get_all()  # CHỈ LẤY feedback chưa deleted
         projects = self.project_repo.get_all()
 
         project_rate_map = {}
@@ -119,10 +118,16 @@ class DashboardUC:
             for log in logs
         ]
 
-    def get_dashboard(self):
-        return {
+    def get_dashboard(self, user):
+        data = {
             "summary": self.get_summary(),
             "intern_performance": self.get_intern_performance(),
             "project_quality": self.get_project_quality(),
-            "activity_logs": self.get_recent_logs(),
         }
+
+        if user and user.role.code == "ADMIN":
+            data["activity_logs"] = self.get_recent_logs()
+        else:
+            data["activity_logs"] = []
+
+        return data

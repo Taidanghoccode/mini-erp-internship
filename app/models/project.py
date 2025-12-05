@@ -1,5 +1,7 @@
 from app.db.db import db
 from datetime import date
+from sqlalchemy import func
+from app.models.feedback import Feedback
 
 class Project(db.Model):
     __tablename__ = "projects"
@@ -26,13 +28,18 @@ class Project(db.Model):
             "is_deleted": self.is_deleted,
         }
 
+        valid_feedbacks = [f for f in self.feedbacks if not f.is_deleted]
+
+        scores = [f.score for f in valid_feedbacks if f.score is not None]
+
+        if scores:
+            data["rating"] = round(sum(scores) / len(scores), 1)
+            data["rating_count"] = len(scores)
+        else:
+            data["rating"] = 0
+            data["rating_count"] = 0
+
         if with_counts:
             data["intern_count"] = len(self.project_interns or [])
-            data["feedback_count"] = len(self.feedbacks or [])
-            data["avg_rating"] = (
-    round(sum(f.score for f in self.feedbacks) / len(self.feedbacks), 1)
-) if self.feedbacks else None
-
-
 
         return data

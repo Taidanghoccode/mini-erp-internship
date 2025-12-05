@@ -4,6 +4,13 @@ from app.utils.uc_provider import provide_feedback_uc
 
 feedback_bp = Blueprint("feedback_bp", __name__, url_prefix="/api/feedback")
 
+@feedback_bp.route("/all", methods=["GET"])
+@require_auth
+def get_all():
+    uc = provide_feedback_uc()
+    user = g.current_user
+    items = uc.feedback_repo.get_all()
+    return jsonify([f.to_dict() for f in items]), 200
 
 @feedback_bp.route("/trainer/intern", methods=["POST"])
 @require_auth
@@ -17,7 +24,6 @@ def trainer_evaluate_intern():
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
 
-
 @feedback_bp.route("/intern/project", methods=["POST"])
 @require_auth
 def intern_feedback_project():
@@ -29,7 +35,6 @@ def intern_feedback_project():
         return jsonify(fb), 201
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
-
 
 @feedback_bp.route("/trainer/project", methods=["POST"])
 @require_auth
@@ -43,7 +48,6 @@ def trainer_evaluate_project():
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
 
-
 @feedback_bp.route("/intern/<int:intern_id>", methods=["GET"])
 @require_auth
 def get_feedback_for_intern(intern_id):
@@ -54,7 +58,6 @@ def get_feedback_for_intern(intern_id):
         return jsonify(result), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
-
 
 @feedback_bp.route("/project/<int:project_id>", methods=["GET"])
 @require_auth
@@ -67,7 +70,6 @@ def get_feedback_for_project(project_id):
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
 
-
 @feedback_bp.route("/<int:feedback_id>", methods=["PUT"])
 @require_auth
 def update_feedback(feedback_id):
@@ -79,7 +81,6 @@ def update_feedback(feedback_id):
         return jsonify(fb), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403
-
 
 @feedback_bp.route("/<int:feedback_id>", methods=["DELETE"])
 @require_auth

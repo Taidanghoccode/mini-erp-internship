@@ -74,7 +74,7 @@ def get_interns_of_project(project_id):
     uc = provide_project_uc()
     user = g.current_user
     try:
-        result = uc.get_interns_in_project(user.id, project_id)
+        result = uc.get_interns_of_project(user.id, project_id)
         return jsonify(result), 200
     except PermissionError as e:
         return jsonify({"error": str(e)}), 403

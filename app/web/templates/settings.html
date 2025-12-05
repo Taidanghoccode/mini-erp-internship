@@ -2,14 +2,14 @@
 {% set page_title = "Settings" %}
 {% block content %}
 
-<div id="toast"
-     style="position:fixed;top:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:10px;"></div>
+<div id="toast" style="position:fixed;top:20px;right:20px;z-index:99999;display:flex;flex-direction:column;gap:10px;">
+</div>
 
 <script>
-function showToast(msg, type="success") {
-    const colors = { success:"#16a34a", error:"#dc2626", info:"#2563eb" };
-    const t = document.createElement("div");
-    t.style = `
+    function showToast(msg, type = "success") {
+        const colors = { success: "#16a34a", error: "#dc2626", info: "#2563eb" };
+        const t = document.createElement("div");
+        t.style = `
         background:${colors[type]};
         color:white;
         padding:12px 16px;
@@ -19,14 +19,14 @@ function showToast(msg, type="success") {
         opacity:0;
         transition:all .3s ease;
     `;
-    t.innerText = msg;
-    document.getElementById("toast").appendChild(t);
-    setTimeout(()=>t.style.opacity=1,10);
-    setTimeout(()=>{
-        t.style.opacity=0;
-        setTimeout(()=>t.remove(),300);
-    },2500);
-}
+        t.innerText = msg;
+        document.getElementById("toast").appendChild(t);
+        setTimeout(() => t.style.opacity = 1, 10);
+        setTimeout(() => {
+            t.style.opacity = 0;
+            setTimeout(() => t.remove(), 300);
+        }, 2500);
+    }
 </script>
 
 <div class="header">
@@ -93,187 +93,165 @@ function showToast(msg, type="success") {
 </div>
 
 <script>
-const CAN_DELETE = {{ ("USER_MANAGE" in permissions) | tojson }};
-console.log("Can delete logs:", CAN_DELETE);
-console.log("Permissions:", {{ permissions | tojson }});
+    const CAN_DELETE = {{ ("USER_MANAGE" in permissions) | tojson }};
+    console.log("Can delete logs:", CAN_DELETE);
+    console.log("Permissions:", {{ permissions | tojson }});
 
-function showTab(name, btn) {
-    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    document.querySelectorAll(".set-btn").forEach(b => b.classList.remove("active"));
+    function showTab(name, btn) {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".set-btn").forEach(b => b.classList.remove("active"));
 
-    document.getElementById(`tab-${name}`).classList.add("active");
-    btn.classList.add("active");
+        document.getElementById(`tab-${name}`).classList.add("active");
+        btn.classList.add("active");
 
-    if (name === "activity") loadLogs();
-}
-
-async function loadLogs() {
-    const res = await fetch("/api/activity-logs/", {
-        headers: { "X-User-ID": "{{ current_user.id }}" }
-    });
-    const data = await res.json();
-
-    const box = document.getElementById("activityList");
-
-    if (!Array.isArray(data) || !data.length) {
-        box.innerHTML = "<p>No logs available.</p>";
-        return;
+        if (name === "activity") loadLogs();
     }
 
-    box.innerHTML = data.map(log => `
+    async function loadLogs() {
+        const res = await fetch("/api/activity-logs/", {
+            headers: { "X-User-ID": "{{ current_user.id }}" }
+        });
+        const data = await res.json();
+
+        const box = document.getElementById("activityList");
+
+        if (!Array.isArray(data) || !data.length) {
+            box.innerHTML = "<p>No logs available.</p>";
+            return;
+        }
+
+        box.innerHTML = data.map(log => `
         <div class="log-item">
             <div class="log-content">
                 <b>${log.action}</b> — ${log.details}
                 <div class="time">${log.timestamp}</div>
             </div>
-            ${CAN_DELETE ? 
-                `<button class="btn-danger btn-sm" onclick="deleteLog(${log.id})">Delete</button>` 
-                : ""
-            }
+            
         </div>
     `).join("");
-}
+    }
 
-async function deleteLog(id) {
-    if (!confirm("Delete this log?")) return;
+    function openChangePasswordModal() {
+        document.getElementById("changePasswordModal").style.display = "block";
+        document.getElementById("changePasswordForm").reset();
+        document.getElementById("passwordHelp").textContent = "Must be at least 6 characters";
+        document.getElementById("passwordHelp").className = "help-text";
+        document.getElementById("confirmHelp").textContent = "";
+        document.getElementById("confirmHelp").className = "help-text";
+    }
 
-    const res = await fetch(`/api/activity-logs/${id}`, {
-        method: "DELETE",
-        headers: { "X-User-ID": "{{ current_user.id }}" }
+    function closeChangePasswordModal() {
+        document.getElementById("changePasswordModal").style.display = "none";
+        document.getElementById("changePasswordForm").reset();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const newPasswordInput = document.getElementById("newPassword");
+        const confirmPasswordInput = document.getElementById("confirmPassword");
+        const passwordHelp = document.getElementById("passwordHelp");
+        const confirmHelp = document.getElementById("confirmHelp");
+
+        if (newPasswordInput) {
+            newPasswordInput.addEventListener('input', function () {
+                const password = this.value;
+
+                if (password.length === 0) {
+                    passwordHelp.textContent = "Must be at least 6 characters";
+                    passwordHelp.className = "help-text";
+                } else if (password.length < 6) {
+                    passwordHelp.textContent = `Too short (${password.length}/6 characters)`;
+                    passwordHelp.className = "help-text error";
+                } else {
+                    passwordHelp.textContent = "Good password ✓";
+                    passwordHelp.className = "help-text success";
+                }
+
+                if (confirmPasswordInput.value.length > 0) {
+                    validateConfirmPassword();
+                }
+            });
+        }
+
+        if (confirmPasswordInput) {
+            confirmPasswordInput.addEventListener('input', validateConfirmPassword);
+        }
+
+        function validateConfirmPassword() {
+            const newPassword = newPasswordInput.value;
+            const confirmPassword = confirmPasswordInput.value;
+
+            if (confirmPassword.length === 0) {
+                confirmHelp.textContent = "";
+                confirmHelp.className = "help-text";
+            } else if (newPassword !== confirmPassword) {
+                confirmHelp.textContent = "Passwords do not match ✗";
+                confirmHelp.className = "help-text error";
+            } else {
+                confirmHelp.textContent = "Passwords match ✓";
+                confirmHelp.className = "help-text success";
+            }
+        }
     });
 
-    const data = await res.json();
+    async function submitChangePassword() {
+        const oldPassword = document.getElementById("oldPassword").value;
+        const newPassword = document.getElementById("newPassword").value;
+        const confirmPassword = document.getElementById("confirmPassword").value;
 
-    if (!res.ok) {
-        showToast(data.error || "Delete failed", "error");
-        return;
-    }
-
-    showToast("Log deleted", "success");
-    loadLogs();
-}
-
-function openChangePasswordModal() {
-    document.getElementById("changePasswordModal").style.display = "block";
-    document.getElementById("changePasswordForm").reset();
-    document.getElementById("passwordHelp").textContent = "Must be at least 6 characters";
-    document.getElementById("passwordHelp").className = "help-text";
-    document.getElementById("confirmHelp").textContent = "";
-    document.getElementById("confirmHelp").className = "help-text";
-}
-
-function closeChangePasswordModal() {
-    document.getElementById("changePasswordModal").style.display = "none";
-    document.getElementById("changePasswordForm").reset();
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    const newPasswordInput = document.getElementById("newPassword");
-    const confirmPasswordInput = document.getElementById("confirmPassword");
-    const passwordHelp = document.getElementById("passwordHelp");
-    const confirmHelp = document.getElementById("confirmHelp");
-
-    if (newPasswordInput) {
-        newPasswordInput.addEventListener('input', function() {
-            const password = this.value;
-            
-            if (password.length === 0) {
-                passwordHelp.textContent = "Must be at least 6 characters";
-                passwordHelp.className = "help-text";
-            } else if (password.length < 6) {
-                passwordHelp.textContent = `Too short (${password.length}/6 characters)`;
-                passwordHelp.className = "help-text error";
-            } else {
-                passwordHelp.textContent = "Good password ✓";
-                passwordHelp.className = "help-text success";
-            }
-
-            if (confirmPasswordInput.value.length > 0) {
-                validateConfirmPassword();
-            }
-        });
-    }
-
-    if (confirmPasswordInput) {
-        confirmPasswordInput.addEventListener('input', validateConfirmPassword);
-    }
-
-    function validateConfirmPassword() {
-        const newPassword = newPasswordInput.value;
-        const confirmPassword = confirmPasswordInput.value;
-
-        if (confirmPassword.length === 0) {
-            confirmHelp.textContent = "";
-            confirmHelp.className = "help-text";
-        } else if (newPassword !== confirmPassword) {
-            confirmHelp.textContent = "Passwords do not match ✗";
-            confirmHelp.className = "help-text error";
-        } else {
-            confirmHelp.textContent = "Passwords match ✓";
-            confirmHelp.className = "help-text success";
-        }
-    }
-});
-
-async function submitChangePassword() {
-    const oldPassword = document.getElementById("oldPassword").value;
-    const newPassword = document.getElementById("newPassword").value;
-    const confirmPassword = document.getElementById("confirmPassword").value;
-
-    if (!oldPassword || !newPassword || !confirmPassword) {
-        showToast("Please fill in all fields", "error");
-        return;
-    }
-
-    if (newPassword.length < 6) {
-        showToast("New password must be at least 6 characters", "error");
-        return;
-    }
-
-    if (newPassword !== confirmPassword) {
-        showToast("New passwords do not match", "error");
-        return;
-    }
-
-    try {
-        const res = await fetch("/api/auth/change-password", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                old_password: oldPassword,
-                new_password: newPassword
-            })
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-            showToast(data.error || "Failed to change password", "error");
+        if (!oldPassword || !newPassword || !confirmPassword) {
+            showToast("Please fill in all fields", "error");
             return;
         }
 
-        showToast("Password changed successfully", "success");
-        closeChangePasswordModal();
-        
-        if (document.getElementById("tab-activity").classList.contains("active")) {
-            loadLogs();
+        if (newPassword.length < 6) {
+            showToast("New password must be at least 6 characters", "error");
+            return;
         }
-    } catch (error) {
-        console.error("Change password error:", error);
-        showToast("An error occurred", "error");
-    }
-}
 
-window.onclick = function(event) {
-    const modal = document.getElementById("changePasswordModal");
-    if (event.target === modal) {
-        closeChangePasswordModal();
+        if (newPassword !== confirmPassword) {
+            showToast("New passwords do not match", "error");
+            return;
+        }
+
+        try {
+            const res = await fetch("/api/auth/change-password", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    old_password: oldPassword,
+                    new_password: newPassword
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                showToast(data.error || "Failed to change password", "error");
+                return;
+            }
+
+            showToast("Password changed successfully", "success");
+            closeChangePasswordModal();
+
+            if (document.getElementById("tab-activity").classList.contains("active")) {
+                loadLogs();
+            }
+        } catch (error) {
+            console.error("Change password error:", error);
+            showToast("An error occurred", "error");
+        }
     }
-}
+
+    window.onclick = function (event) {
+        const modal = document.getElementById("changePasswordModal");
+        if (event.target === modal) {
+            closeChangePasswordModal();
+        }
+    }
 </script>
 
 
 
-{% endblock %}  
+{% endblock %}

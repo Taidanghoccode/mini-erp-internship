@@ -18,5 +18,5 @@ class ActivityLog(db.Model):
             "user_id": self.user_id,
             "action": self.action,
             "details": self.details,
-            "timestamp": str(self.timestamp)
+            "timestamp": self.timestamp
         }

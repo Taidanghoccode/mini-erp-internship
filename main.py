@@ -12,7 +12,7 @@ from app.api.feedback_controller import feedback_bp
 from app.api.role_controller import role_bp
 from app.api.permission_controller import permission_bp
 from app.api.report_controller import report_bp
-from app.api.training_plan_controller import trainingplan_bp
+from app.api.training_plan_controller import training_plan_bp
 from app.api.auth_controller import auth_bp
 from app.api.notification_controller import notif_bp
 from app.api.activitylog_controller import log_bp
@@ -46,7 +46,7 @@ def create_app():
     app.register_blueprint(role_bp)
     app.register_blueprint(permission_bp)
     app.register_blueprint(report_bp)
-    app.register_blueprint(trainingplan_bp)
+    app.register_blueprint(training_plan_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(notif_bp)
     app.register_blueprint(log_bp)

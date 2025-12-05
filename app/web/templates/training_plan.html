@@ -1,6 +1,128 @@
 {% extends "base.html" %}
 {% set page_title = "Training Plans" %}
 {% block content %}
+<div id="toast"></div>
+
+<style>
+    #toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999 !important;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .toast-msg {
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: #333;
+        color: white;
+        animation: fadein .2s ease, fadeout .35s ease-out 2.5s forwards;
+    }
+
+    .toast-success {
+        background: #16a34a !important;
+    }
+
+    .toast-error {
+        background: #dc2626 !important;
+    }
+
+    .toast-info {
+        background: #2563eb !important;
+    }
+
+    @keyframes fadein {
+        from {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes fadeout {
+        from {
+            opacity: 1;
+        }
+
+        to {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+    }
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        display: none;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal.show {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        width: 480px;
+        max-height: 90vh;
+        overflow-y: auto;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, .15);
+    }
+
+    .builder-box {
+        background: #f8fafc;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .builder-item {
+        display: grid;
+        grid-template-columns: 1fr 1.2fr 40px;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .btn-primary {
+        background: #1877f2;
+        color: white;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .btn-success {
+        background: #16a34a;
+        color: white;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .btn-danger {
+        background: #dc2626;
+        color: white;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+</style>
 
 <div class="header">
     <h1><i class="fa-solid fa-book-open"></i> Training Plans</h1>
@@ -31,355 +153,432 @@
     </table>
 </div>
 
-<!-- ================= MODAL ================= -->
 <div class="modal" id="planModal">
-    <div class="modal-content modal-wide">
-        <div class="modal-header">
-            <h3 id="modalTitle"></h3>
-            <span class="close" onclick="closeModal()">×</span>
+    <div class="modal-content">
+        <h3 id="modalTitle" style="margin-bottom: 20px;">Edit Training Plan</h3>
+
+        <div class="form-group">
+            <label>Title *</label>
+            <input id="m-title">
         </div>
 
-        <div class="modal-body">
-
-            <!-- ROW 1 -->
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Title *</label>
-                    <input id="m-title">
-                </div>
-
-                <div class="form-group">
-                    <label>Intern *</label>
-                    <select id="m-intern"></select>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="m-description" rows="3"></textarea>
-            </div>
-
-            <div class="grid-2">
-                <div class="form-group">
-                    <label>Objective</label>
-                    <input id="m-objective">
-                </div>
-                <div class="form-group">
-                    <label>Skills</label>
-                    <input id="m-skills">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Progress (%)</label>
-                <input type="number" id="m-progress" min="0" max="100" value="0">
-            </div>
-
-            <h4 class="section-title">Timeline</h4>
-            <div id="timelineBuilder" class="builder-box"></div>
-            <button onclick="addTimelineEntry()" class="btn-add-row">+ Add Milestone</button>
-
-            <h4 class="section-title">Documents</h4>
-            <div id="docsBuilder" class="builder-box"></div>
-            <button onclick="addDocEntry()" class="btn-add-row">+ Add Document</button>
-
-            <h4 class="section-title">Videos</h4>
-            <div id="videosBuilder" class="builder-box"></div>
-            <button onclick="addVideoEntry()" class="btn-add-row">+ Add Video</button>
-
+        <div class="form-group">
+            <label>Intern *</label>
+            <select id="m-intern"></select>
         </div>
 
-        <div class="modal-footer">
-            <button onclick="savePlan()" class="btn-primary">Save</button>
-            <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea id="m-description" rows="3"></textarea>
         </div>
+
+        <div class="form-group">
+            <label>Objective</label>
+            <input id="m-objective">
+        </div>
+
+        <div class="form-group">
+            <label>Skills</label>
+            <input id="m-skills">
+        </div>
+
+        <div class="form-group">
+            <label>Timeline</label>
+            <div class="builder-box" id="timelineBuilder"></div>
+            <button type="button" class="btn-add" onclick="addEntry('timeline')">+ Add Timeline Entry</button>
+        </div>
+
+        <div class="form-group">
+            <label>Resources - Documents</label>
+            <div class="builder-box" id="docsBuilder"></div>
+            <button type="button" class="btn-add" onclick="addEntry('docs')">+ Add Document</button>
+        </div>
+
+        <div class="form-group">
+            <label>Resources - Videos</label>
+            <div class="builder-box" id="videosBuilder"></div>
+            <button type="button" class="btn-add" onclick="addEntry('videos')">+ Add Video</button>
+        </div>
+
+        <div class="form-group">
+            <label>Progress (%)</label>
+            <input type="number" id="m-progress" min="0" max="100">
+        </div>
+
+        <button onclick="savePlan()" class="btn-success" style="width:100%;margin-top:10px;">Save</button>
+        <button onclick="closeModal()" class="btn-danger" style="width:100%;margin-top:10px;">Cancel</button>
     </div>
 </div>
 
-<style>
-.modal-wide { width: 900px; max-height: 90vh; overflow-y: auto; }
-.section-title { margin:20px 0 10px; font-size:16px; font-weight:600; color:var(--fpt-blue); }
-.builder-box { background:#f9fafb; border:1px solid #e5e7eb; padding:12px; border-radius:8px; min-height:55px;}
-.builder-item { display:grid; grid-template-columns:150px 1fr 40px; gap:10px; background:white; border:1px solid #e5e7eb; padding:10px; border-radius:6px; margin-bottom:10px; }
-.btn-remove { background:#dc2626; color:white; border:none; border-radius:6px; cursor:pointer; }
-.empty-text { color:#9ca3af; font-size:13px; text-align:center; }
-</style>
-
 <script>
-let role = localStorage.getItem("role");       // INTERN / ADMIN
-let current_intern_id = localStorage.getItem("intern_id"); // set after login
-let editingID = null;
 
-let internsMap = {};
-let usersMap = {};
-let timelineEntries = [];
-let docEntries = [];
-let videoEntries = [];
-
-// ======================== AUTH HEADER =======================
-function getHeaders() {
-    return {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + localStorage.getItem("token")
-    };
-}
-
-// ======================== INIT ==============================
-async function init() {
-    await loadInternOptions();
-    await loadUsers();
-    await loadPlans();
-
-    /** INTERN → ẨN FILTER + ẨN ADD PLAN + ẨN DROPDOWN INTERN */
-    if (role === "INTERN") {
-        document.getElementById("filterRow").style.display = "none";
-        document.getElementById("btnAddPlan").style.display = "none";
-
-        document.getElementById("m-intern").disabled = true;
-    }
-}
-
-init();
-
-// ======================== LOAD INTERN OPTIONS ======================
-async function loadInternOptions() {
-    const r = await fetch("/api/interns/", { headers: getHeaders() });
-    const data = await r.json();
-
-    const mIntern = document.getElementById("m-intern");
-    const filterIntern = document.getElementById("filterIntern");
-
-    mIntern.innerHTML = "";
-    filterIntern.innerHTML = `<option value="">Intern (All)</option>`;
-
-    data.forEach(i => {
-        internsMap[i.id] = i.name;
-        mIntern.innerHTML += `<option value="${String(i.id)}">${i.name}</option>`;
-        filterIntern.innerHTML += `<option value="${String(i.id)}">${i.name}</option>`;
-    });
-}
-
-// ======================== LOAD USERS ======================
-async function loadUsers() {
-    const r = await fetch("/api/users/", { headers: getHeaders() });
-    const data = await r.json();
-    data.forEach(u => usersMap[u.id] = u.username);
-}
-
-// ======================== LOAD PLANS ======================
-async function loadPlans() {
-
-    const r = await fetch("/api/training-plans/", { headers: getHeaders() });
-    let data = await r.json();
-
-    // INTERN → chỉ load kế hoạch của mình
-    if (role === "INTERN") {
-        data = data.filter(p => p.intern_id == current_intern_id);
+    function showToast(msg, type = "success") {
+        const box = document.getElementById("toast");
+        const el = document.createElement("div");
+        el.className = `toast-msg toast-${type}`;
+        el.innerText = msg;
+        box.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
     }
 
-    const key = document.getElementById("searchInput").value.toLowerCase();
-    const internFilter = document.getElementById("filterIntern").value;
+    let role = (localStorage.getItem("role") || "").toUpperCase();
+    let current_intern_id = localStorage.getItem("intern_id");
+    let editingID = null;
 
-    data = data.filter(p => 
-        p.title.toLowerCase().includes(key) &&
-        (internFilter === "" || p.intern_id == internFilter)
-    );
+    let internsMap = {};
+    let state = { timeline: [], docs: [], videos: [] };
 
-    const tbody = document.querySelector("#planTable tbody");
-    tbody.innerHTML = "";
+    let permissions = [];
+    try { permissions = JSON.parse(localStorage.getItem("permissions") || "[]"); } catch (e) { }
 
-    data.forEach(p => {
-        tbody.innerHTML += `
-        <tr>
-            <td>${p.title}</td>
-            <td>${internsMap[p.intern_id] || "-"}</td>
-            <td>${p.progress}%</td>
-            <td>${usersMap[p.created_by] || "-"}</td>
-            <td>
-                <button class="btn-icon btn-view" onclick="viewDetail(${p.id})"><i class="fa fa-eye"></i></button>
+    function hasPermission(code) { return permissions.includes(code); }
+    function canCreate() { return hasPermission("TRAININGPLAN_CREATE"); }
+    function canUpdate() { return hasPermission("TRAININGPLAN_UPDATE"); }
+    function canDelete() { return hasPermission("TRAININGPLAN_DELETE"); }
+    function canView() { return hasPermission("TRAININGPLAN_VIEW") || role === "INTERN"; }
 
-                ${role !== "INTERN" ? `
-                <button class="btn-icon btn-edit" onclick="openEdit(${p.id})"><i class="fa fa-pen"></i></button>
-                <button class="btn-icon btn-delete" onclick="deletePlan(${p.id})"><i class="fa fa-trash"></i></button>
-                ` : ``}
-            </td>
-        </tr>`;
-    });
-}
-
-function viewDetail(id) {
-    window.location.href = `/training-plans/${id}`;
-}
-
-// ======================== OPEN CREATE ======================
-function openCreateModal() {
-    editingID = null;
-    document.getElementById("modalTitle").innerText = "Add Training Plan";
-
-    document.getElementById("m-title").value = "";
-    document.getElementById("m-description").value = "";
-    document.getElementById("m-objective").value = "";
-    document.getElementById("m-skills").value = "";
-    document.getElementById("m-progress").value = 0;
-
-    timelineEntries = [];
-    docEntries = [];
-    videoEntries = [];
-
-    if (role === "INTERN") {
-        document.getElementById("m-intern").value = String(current_intern_id);
+    function getHeaders() {
+        return {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + localStorage.getItem("token")
+        };
     }
 
-    renderBuilders();
-    document.getElementById("planModal").style.display = "flex";
-}
+    async function init() {
+        if (!canView()) {
+            showToast("You don't have permission to view training plans", "error");
+            window.location.href = "/";
+            return;
+        }
 
-// ======================== OPEN EDIT ======================
-async function openEdit(id) {
-    editingID = id;
-    const r = await fetch(`/api/training-plans/${id}`, { headers: getHeaders() });
-    const p = await r.json();
-
-    document.getElementById("modalTitle").innerText = "Edit Training Plan";
-
-    document.getElementById("m-title").value = p.title || "";
-    document.getElementById("m-description").value = p.description || "";
-    document.getElementById("m-objective").value = p.objective || "";
-    document.getElementById("m-skills").value = p.skills || "";
-    document.getElementById("m-progress").value = p.progress || 0;
-
-    // 🔥 FIX QUAN TRỌNG → convert sang string
-    document.getElementById("m-intern").value = String(p.intern_id);
-
-    try {
-        timelineEntries = p.timeline ? JSON.parse(p.timeline) : [];
-        const resData = p.resources ? JSON.parse(p.resources) : {};
-        docEntries = resData.docs || [];
-        videoEntries = resData.videos || [];
-    } catch (e) {
-        timelineEntries = [];
-        docEntries = [];
-        videoEntries = [];
+        await loadInternOptionsForForm();
+        await loadPlans();
+        applyRoleUI();
     }
 
-    renderBuilders();
-    document.getElementById("planModal").style.display = "flex";
-}
+    function applyRoleUI() {
+        const filterRow = document.getElementById("filterRow");
+        const btnAddPlan = document.getElementById("btnAddPlan");
+        const mIntern = document.getElementById("m-intern");
 
-// ======================== SAVE ======================
-async function savePlan() {
-    const body = {
-        title: document.getElementById("m-title").value.trim(),
-        description: document.getElementById("m-description").value.trim(),
-        objective: document.getElementById("m-objective").value.trim(),
-        skills: document.getElementById("m-skills").value.trim(),
-        progress: parseInt(document.getElementById("m-progress").value),
-        intern_id: parseInt(document.getElementById("m-intern").value),
-        timeline: JSON.stringify(timelineEntries),
-        resources: JSON.stringify({ docs: docEntries, videos: videoEntries }),
-    };
-
-    const url = editingID ? `/api/training-plans/${editingID}` : "/api/training-plans/";
-    const method = editingID ? "PUT" : "POST";
-
-    const r = await fetch(url, {
-        method,
-        headers: getHeaders(),
-        body: JSON.stringify(body)
-    });
-
-    if (!r.ok) return alert("Error saving");
-
-    alert("Saved!");
-    closeModal();
-    loadPlans();
-}
-
-// ======================== DELETE ======================
-async function deletePlan(id) {
-    if (!confirm("Delete?")) return;
-    await fetch(`/api/training-plans/${id}`, {
-        method: "DELETE",
-        headers: getHeaders()
-    });
-    loadPlans();
-}
-
-// ======================== RENDER UI ======================
-function closeModal() {
-    document.getElementById("planModal").style.display = "none";
-}
-
-function renderBuilders() {
-    renderTimeline();
-    renderDocs();
-    renderVideos();
-}
-
-function renderTimeline() {
-    const box = document.getElementById("timelineBuilder");
-    if (timelineEntries.length === 0) {
-        box.innerHTML = `<div class="empty-text">No timeline entries</div>`;
-        return;
+        if (role === "INTERN") {
+            filterRow.style.display = "none";
+            btnAddPlan.style.display = "none";
+            if (mIntern) mIntern.disabled = true;
+        } else {
+            filterRow.style.display = "flex";
+            if (!canCreate()) btnAddPlan.style.display = "none";
+        }
     }
 
-    box.innerHTML = timelineEntries.map((e, i) => `
-        <div class="builder-item">
-            <input type="date" value="${e.date || ""}" onchange="timelineEntries[${i}].date=this.value"/>
-            <div class="builder-fields">
-                <input value="${e.title || ""}" placeholder="Title" 
-                    onchange="timelineEntries[${i}].title=this.value">
-                <input value="${e.note || ""}" placeholder="Note" 
-                    onchange="timelineEntries[${i}].note=this.value">
+    init();
+
+    async function loadInternOptionsForForm() {
+        const mIntern = document.getElementById("m-intern");
+        const filterIntern = document.getElementById("filterIntern");
+
+        try {
+            const r = await fetch("/api/interns/", { headers: getHeaders() });
+            if (r.ok) {
+                const data = await r.json();
+
+                mIntern.innerHTML = "";
+                filterIntern.innerHTML = `<option value="">Intern (All)</option>`;
+
+                data.forEach(i => {
+                    internsMap[i.id] = i.name;
+                    mIntern.innerHTML += `<option value="${i.id}">${i.name}</option>`;
+                    filterIntern.innerHTML += `<option value="${i.id}">${i.name}</option>`;
+                });
+            }
+        } catch (e) { }
+    }
+
+    async function loadPlans() {
+        try {
+            const r = await fetch("/api/training-plans/", { headers: getHeaders() });
+            if (!r.ok) {
+                const bd = await r.json();
+                throw new Error(bd.error || "Failed to load plans");
+            }
+
+            let data = await r.json();
+
+            data.forEach(p => {
+                if (p.intern_id && p.intern_name && !internsMap[p.intern_id]) {
+                    internsMap[p.intern_id] = p.intern_name;
+                }
+            });
+
+            updateInternFilterFromPlans(data);
+
+            if (role !== "INTERN") {
+                const key = document.getElementById("searchInput").value.toLowerCase();
+                const internFilter = document.getElementById("filterIntern").value;
+
+                data = data.filter(p =>
+                    p.title.toLowerCase().includes(key) &&
+                    (internFilter === "" || p.intern_id == internFilter)
+                );
+            }
+
+            const tbody = document.querySelector("#planTable tbody");
+            tbody.innerHTML = "";
+
+            if (!data.length) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;">No training plans found</td></tr>`;
+                return;
+            }
+
+            data.forEach(p => {
+                tbody.innerHTML += `
+            <tr>
+                <td>${p.title}</td>
+                <td>${p.intern_name || "-"}</td>
+                <td>${p.progress}%</td>
+                <td>${p.created_by_name || "-"}</td>
+                <td>
+                    <button class="btn-icon btn-view" onclick="viewDetail(${p.id})">
+                        <i class="fa fa-eye"></i>
+                    </button>
+                    ${canUpdate() ? `
+                        <button class="btn-icon btn-edit" onclick="openEdit(${p.id})">
+                            <i class="fa fa-pen"></i>
+                        </button>` : ""}
+                    ${canDelete() ? `
+                        <button class="btn-icon btn-delete" onclick="deletePlan(${p.id})">
+                            <i class="fa fa-trash"></i>
+                        </button>` : ""}
+                </td>
+            </tr>`;
+            });
+
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+    }
+
+    function updateInternFilterFromPlans(plans) {
+        const filterIntern = document.getElementById("filterIntern");
+        const mIntern = document.getElementById("m-intern");
+        const unique = {};
+
+        plans.forEach(p => {
+            if (p.intern_id && p.intern_name) unique[p.intern_id] = p.intern_name;
+        });
+
+        if (filterIntern.options.length <= 1) {
+            filterIntern.innerHTML = `<option value="">Intern (All)</option>`;
+            Object.keys(unique).forEach(id => {
+                filterIntern.innerHTML += `<option value="${id}">${unique[id]}</option>`;
+            });
+        }
+
+        if (!mIntern.options.length) {
+            Object.keys(unique).forEach(id => {
+                mIntern.innerHTML += `<option value="${id}">${unique[id]}</option>`;
+            });
+        }
+    }
+
+    function viewDetail(id) { window.location.href = `/training-plans/${id}`; }
+
+    function parseData(data, fallback = []) {
+        if (!data || data === "None") return fallback;
+        if (typeof data === "string") {
+            try { return JSON.parse(data); } catch { return fallback; }
+        }
+        return data;
+    }
+
+    function openCreateModal() {
+        if (!canCreate()) {
+            showToast("You don't have permission to create training plans", "error");
+            return;
+        }
+
+        editingID = null;
+
+        document.getElementById("modalTitle").innerText = "Add Training Plan";
+
+        document.getElementById("m-title").value = "";
+        document.getElementById("m-description").value = "";
+        document.getElementById("m-objective").value = "";
+        document.getElementById("m-skills").value = "";
+        document.getElementById("m-progress").value = 0;
+
+        if (role === "INTERN" && current_intern_id) {
+            document.getElementById("m-intern").value = current_intern_id;
+        }
+
+        state = { timeline: [], docs: [], videos: [] };
+        renderBuilder("timeline");
+        renderBuilder("docs");
+        renderBuilder("videos");
+
+        document.getElementById("planModal").classList.add("show");
+    }
+
+    async function openEdit(id) {
+        if (!canUpdate()) {
+            showToast("You don't have permission to update training plans", "error");
+            return;
+        }
+
+        editingID = id;
+
+        try {
+            const r = await fetch(`/api/training-plans/${id}`, { headers: getHeaders() });
+            if (!r.ok) {
+                const bd = await r.json();
+                throw new Error(bd.error || "Failed to load plan");
+            }
+
+            const p = await r.json();
+
+            document.getElementById("modalTitle").innerText = "Edit Training Plan";
+
+            document.getElementById("m-title").value = p.title || "";
+            document.getElementById("m-description").value = p.description || "";
+            document.getElementById("m-objective").value = p.objective || "";
+            document.getElementById("m-skills").value = p.skills || "";
+            document.getElementById("m-progress").value = p.progress || 0;
+            document.getElementById("m-intern").value = p.intern_id;
+
+            state.timeline = parseData(p.timeline, []);
+            const res = parseData(p.resources, {});
+            state.docs = res.docs || [];
+            state.videos = res.videos || [];
+
+            renderBuilder("timeline");
+            renderBuilder("docs");
+            renderBuilder("videos");
+
+            document.getElementById("planModal").classList.add("show");
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+    }
+
+    function addEntry(type) {
+        if (type === "timeline") state.timeline.push({ date: "", title: "", note: "" });
+        else state[type].push("");
+        renderBuilder(type);
+    }
+
+    function removeEntry(type, i) {
+        state[type].splice(i, 1);
+        renderBuilder(type);
+    }
+
+    function renderBuilder(type) {
+        const box = document.getElementById(type + "Builder");
+        const items = state[type];
+
+        if (!items.length) {
+            box.innerHTML = `<p class="empty-text">No ${type} yet.</p>`;
+            return;
+        }
+
+        if (type === "timeline") {
+            box.innerHTML = items.map((e, i) => `
+            <div class="builder-item">
+                <input type="date" value="${e.date || ""}" onchange="state.timeline[${i}].date=this.value">
+                <div>
+                    <input type="text" placeholder="Title" value="${e.title || ''}" onchange="state.timeline[${i}].title=this.value">
+                    <input type="text" placeholder="Note (optional)" value="${e.note || ''}" onchange="state.timeline[${i}].note=this.value">
+                </div>
+                <button class="btn-remove" onclick="removeEntry('timeline',${i})">×</button>
             </div>
-            <button class="btn-remove" onclick="timelineEntries.splice(${i},1);renderTimeline()">×</button>
-        </div>
-    `).join("");
-}
-
-function renderDocs() {
-    const box = document.getElementById("docsBuilder");
-    if (docEntries.length === 0) {
-        box.innerHTML = `<div class="empty-text">No documents</div>`;
-        return;
+        `).join("");
+        } else {
+            box.innerHTML = items.map((link, i) => `
+            <div class="builder-item" style="grid-template-columns:1fr 40px;">
+                <input type="url" value="${link}" onchange="state.${type}[${i}]=this.value">
+                <button class="btn-remove" onclick="removeEntry('${type}',${i})">×</button>
+            </div>
+        `).join("");
+        }
     }
 
-    box.innerHTML = docEntries.map((e, i) => `
-        <div class="builder-item" style="grid-template-columns:1fr 40px;">
-            <input value="${e}" onchange="docEntries[${i}]=this.value">
-            <button class="btn-remove" onclick="docEntries.splice(${i},1);renderDocs()">×</button>
-        </div>
-    `).join("");
-}
+    async function savePlan() {
+        const reqPerm = editingID ? "TRAININGPLAN_UPDATE" : "TRAININGPLAN_CREATE";
+        if (!hasPermission(reqPerm)) {
+            showToast(`You don't have permission to ${editingID ? 'update' : 'create'} training plans`, "error");
+            return;
+        }
 
-function renderVideos() {
-    const box = document.getElementById("videosBuilder");
-    if (videoEntries.length === 0) {
-        box.innerHTML = `<div class="empty-text">No videos</div>`;
-        return;
+        const body = {
+            title: document.getElementById("m-title").value.trim(),
+            description: document.getElementById("m-description").value.trim(),
+            objective: document.getElementById("m-objective").value.trim(),
+            skills: document.getElementById("m-skills").value.trim(),
+            progress: parseInt(document.getElementById("m-progress").value),
+            intern_id: parseInt(document.getElementById("m-intern").value),
+            timeline: JSON.stringify(state.timeline),
+            resources: JSON.stringify({
+                docs: state.docs.filter(x => x.trim()),
+                videos: state.videos.filter(x => x.trim())
+            })
+        };
+
+        if (!body.title || !body.intern_id) {
+            showToast("Title and Intern are required", "error");
+            return;
+        }
+
+        try {
+            const url = editingID ? `/api/training-plans/${editingID}` : "/api/training-plans/";
+            const method = editingID ? "PUT" : "POST";
+
+            const r = await fetch(url, {
+                method,
+                headers: getHeaders(),
+                body: JSON.stringify(body)
+            });
+
+            if (!r.ok) {
+                const bd = await r.json();
+                throw new Error(bd.error || "Error saving");
+            }
+
+            showToast("Saved successfully!", "success");
+            closeModal();
+            loadPlans();
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
     }
 
-    box.innerHTML = videoEntries.map((e, i) => `
-        <div class="builder-item" style="grid-template-columns:1fr 40px;">
-            <input value="${e}" onchange="videoEntries[${i}]=this.value">
-            <button class="btn-remove" onclick="videoEntries.splice(${i},1);renderVideos()">×</button>
-        </div>
-    `).join("");
-}
+    function closeModal() {
+        document.getElementById("planModal").classList.remove("show");
+    }
 
-function addTimelineEntry() {
-    timelineEntries.push({ date: "", title: "", note: "" });
-    renderTimeline();
-}
-function addDocEntry() {
-    docEntries.push("");
-    renderDocs();
-}
-function addVideoEntry() {
-    videoEntries.push("");
-    renderVideos();
-}
+    async function deletePlan(id) {
+        if (!canDelete()) {
+            showToast("You don't have permission to delete training plans", "error");
+            return;
+        }
 
+        if (!confirm("Are you sure you want to delete this training plan?")) return;
+
+        try {
+            const r = await fetch(`/api/training-plans/${id}`, {
+                method: "DELETE",
+                headers: getHeaders()
+            });
+
+            if (!r.ok) {
+                const bd = await r.json();
+                throw new Error(bd.error || "Error deleting");
+            }
+
+            showToast("Deleted successfully!", "success");
+            loadPlans();
+        } catch (e) {
+            showToast("Error: " + e.message, "error");
+        }
+    }
 </script>
 
 {% endblock %}

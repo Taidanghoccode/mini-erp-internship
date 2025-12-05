@@ -13,7 +13,7 @@
 
         <div class="user-dropdown">
             <div class="user-avatar" id="userAvatar">
-            {{ current_user.username[0] | upper if current_user else "?" }}
+                {{ current_user.username[0] | upper if current_user else "?" }}
             </div>
 
             <div class="dropdown-menu" id="dropdownMenu">

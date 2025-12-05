@@ -1,3 +1,5 @@
+import re
+
 from app.repo.user_repo import UserRepo
 from app.repo.role_repo import RoleRepo
 from app.repo.permission_repo import PermissionRepo
@@ -5,6 +7,26 @@ from app.usecase.activitylog_uc import ActivityLogUC
 from app.utils.mail_service import MailService
 from app.utils.notification_service import NotificationService
 from app.utils.exception import NotFound, BadRequest
+
+
+def validate_strong_password(pw: str):
+    if not pw:
+        raise BadRequest("Password is required")
+
+    if len(pw) < 8:
+        raise BadRequest("Password must be at least 8 characters")
+
+    if not re.search(r"[A-Z]", pw):
+        raise BadRequest("Password must contain at least one uppercase letter")
+
+    if not re.search(r"[a-z]", pw):
+        raise BadRequest("Password must contain at least one lowercase letter")
+
+    if not re.search(r"[0-9]", pw):
+        raise BadRequest("Password must contain at least one number")
+
+    if not re.search(r"[\W_]", pw):
+        raise BadRequest("Password must contain at least one special character")
 
 
 class UserUC:
@@ -32,6 +54,8 @@ class UserUC:
 
         if not data.get("username") or not data.get("email") or not data.get("password"):
             raise BadRequest("Missing username, email or password")
+
+        validate_strong_password(data["password"])
 
         role_id = data.get("role_id")
         if role_id:
@@ -83,6 +107,9 @@ class UserUC:
 
     def update_user(self, user_id: int, target_id: int, data: dict):
         self._require(user_id, "USER_MANAGE")
+
+        if "password" in data and data["password"]:
+            validate_strong_password(data["password"])
 
         updated = self.user_repo.update(target_id, data)
         if not updated:
@@ -155,18 +182,32 @@ class UserUC:
         user = self.user_repo.get_by_id(user_id)
         if not user:
             raise NotFound("User not found")
+
         perms = user.permission_codes
-        logs = self.activitylog_uc.get_logs_by_user(user_id)
+
+        if user.role and user.role.code != "ADMIN":
+            return {
+                "user": user.to_dict(),
+                "permissions": perms,
+                "activity_logs": []
+            }
+
+        raw_logs = self.activitylog_uc.get_logs_by_user(user_id)
+
+        activity_logs = []
+        for l in raw_logs:
+            ts = l.get("timestamp")
+            if hasattr(ts, "strftime"):
+                ts = ts.strftime("%Y-%m-%d %H:%M:%S")
+
+            activity_logs.append({
+                "action": l.get("action"),
+                "details": l.get("details"),
+                "timestamp": ts
+            })
 
         return {
             "user": user.to_dict(),
             "permissions": perms,
-            "activity_logs":[
-                {
-                    "action": l.action,
-                    "details": l.details,
-                    "timestamp": l.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                }
-                for l in logs
-            ]
+            "activity_logs": activity_logs
         }

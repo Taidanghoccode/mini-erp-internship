@@ -1,3 +1,6 @@
+from app.repo.user_repo import UserRepo
+
+
 class InternProjectUC:
     def __init__(self, intern_project_repo, intern_repo, project_repo, permission_repo, activitylog_uc):
         self.intern_project_repo = intern_project_repo
@@ -89,8 +92,23 @@ class InternProjectUC:
         
         return self.intern_project_repo.get_projects_by_intern(intern_id)
 
-    def get_interns_of_project(self, user_id: int, project_id: int):        
-        if not self.permission_repo.has_permission(user_id, "PROJECT_VIEW_INTERNS"):
-            raise PermissionError("You don't have permission to view project interns")
-        
-        return self.intern_project_repo.get_interns_by_project(project_id)
+    def get_interns_of_project(self, user_id: int, project_id: int):
+        user = UserRepo().get_by_id(user_id)
+        role = user.role.code if user and user.role else None
+
+        if role in ["ADMIN", "MENTOR"]:
+            return self.intern_project_repo.get_interns_by_project(project_id)
+
+        if role == "INTERN":
+            intern = user.intern_profile
+            if not intern:
+                raise PermissionError("Invalid intern profile")
+            
+            assigned = self.intern_project_repo.get_by_intern_and_project(intern.id, project_id)
+
+            if not assigned:
+                return []
+            
+            return self.intern_project_repo.get_interns_by_project(project_id)
+
+        raise PermissionError("Role not supported")

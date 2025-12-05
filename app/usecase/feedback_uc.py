@@ -1,177 +1,330 @@
+from datetime import datetime
 from app.repo.feedback_repo import FeedbackRepo
+from app.repo.notification_repo import NotificationRepo
 from app.repo.intern_repo import InternRepo
 from app.repo.project_repo import ProjectRepo
+from app.repo.user_repo import UserRepo
 from app.repo.permission_repo import PermissionRepo
-from app.usecase.activitylog_uc import ActivityLogUC
-from app.utils.notification_service import NotificationService
-from app.utils.exception import NotFound, BadRequest
+from app.utils.mail_service import MailService
 from app.models.feedback import FeedbackType
+from app.utils.notification_service import NotificationService
 
 
 class FeedbackUC:
     def __init__(
         self,
-        feedback_repo: FeedbackRepo | None = None,
-        intern_repo: InternRepo | None = None,
-        project_repo: ProjectRepo | None = None,
-        permission_repo: PermissionRepo | None = None,
-        activitylog_uc: ActivityLogUC | None = None,
-        notification_service: NotificationService | None = None,
+        feedback_repo=None,
+        notification_repo=None,
+        intern_repo=None,
+        project_repo=None,
+        user_repo=None,
+        mail_service=None,
+        permission_repo=None
     ):
         self.feedback_repo = feedback_repo or FeedbackRepo()
+        self.notification_repo = notification_repo or NotificationRepo()
         self.intern_repo = intern_repo or InternRepo()
         self.project_repo = project_repo or ProjectRepo()
+        self.user_repo = user_repo or UserRepo()
+        self.mail_service = mail_service or MailService()
         self.permission_repo = permission_repo or PermissionRepo()
-        self.activitylog_uc = activitylog_uc or ActivityLogUC()
-        self.notification_service = notification_service or NotificationService()
 
-    def _require(self, user_id: int, perm_code: str):
-        self.permission_repo.ensure(user_id, perm_code)
-
-    def intern_give_feedback_to_project(self, user_id: int, data: dict):
-        self._require(user_id, "FEEDBACK_CREATE_PROJECT")
-
-        score = data.get("rating") or data.get("score")
-        intern_id = data.get("intern_id")
-        project_id = data.get("project_id")
-
-        if not intern_id or not project_id or score is None:
-            raise BadRequest("Missing intern_id, project_id or score")
-
-        intern = self.intern_repo.get_by_id(intern_id)
-        if not intern:
-            raise NotFound("Intern not found")
-
-        project = self.project_repo.get_by_id(project_id)
-        if not project:
-            raise NotFound("Project not found")
-
-        fb = self.feedback_repo.create({
-            "type": FeedbackType.INTERN_PROJECT,
-            "score": score,
-            "comment": data.get("comment"),
-            "from_user_id": user_id,
-            "to_intern_id": None,
-            "to_project_id": project_id
-        })
-
-        self.notification_service.notify_user(
-            project.created_by if hasattr(project, "created_by") else user_id,
-            "New Project Rating",
-            f"Your project received a new rating: {score} stars.",
-            type="feedback"
+        self.notifier = NotificationService(
+            notification_repo=self.notification_repo,
+            mail_service=self.mail_service
         )
 
-        return fb.to_dict()
+    def get_all_feedback(self):
+        items = self.feedback_repo.get_all()
+        return [f.to_dict() for f in items]
 
     def mentor_give_feedback_to_intern(self, user_id: int, data: dict):
-        self._require(user_id, "EVALUATE_INTERN")
+        self.permission_repo.ensure(user_id, "EVALUATE_INTERN")
 
-        score = data.get("rating") or data.get("score")
         intern_id = data.get("intern_id")
+        score = data.get("score")
+        comment = data.get("comment") or ""
 
-        if not intern_id or score is None:
-            raise BadRequest("Missing intern_id or score")
+        if intern_id is None:
+            raise ValueError("intern_id is required")
+        if score is None:
+            raise ValueError("score is required")
 
         intern = self.intern_repo.get_by_id(intern_id)
+        mentor = self.user_repo.get_by_id(user_id)
+
         if not intern:
-            raise NotFound("Intern not found")
+            raise ValueError("Intern not found")
 
-        fb = self.feedback_repo.create({
-            "type": FeedbackType.TRAINER_INTERN,
-            "score": score,
-            "comment": data.get("comment"),
-            "from_user_id": user_id,
-            "to_intern_id": intern_id,
-            "to_project_id": None
-        })
+        existing = self.feedback_repo.get_by_user_and_intern(user_id, intern_id)
 
-        self.notification_service.notify_user(
-            intern.user_id if hasattr(intern, "user_id") else intern_id,
-            "New Intern Evaluation",
-            f"You received a new evaluation: {score} points.",
-            type="feedback"
+        if existing:
+            fb = self.feedback_repo.update(existing.id, {
+                "score": score,
+                "comment": comment
+            })
+            created = False
+        else:
+            fb = self.feedback_repo.create({
+                "from_user_id": user_id,
+                "to_intern_id": intern_id,
+                "score": score,
+                "comment": comment,
+                "type": FeedbackType.TRAINER_INTERN,
+                "created_at": datetime.utcnow()
+            })
+            created = True
+
+        # Notify intern
+        if intern.user_id:
+            title = (
+                "New Intern Evaluation"
+                if created else
+                "Intern Evaluation Updated"
+            )
+            message = f"You received {score}/10 from {mentor.username}."
+
+            self.notifier.notify_user(
+                user_id=intern.user_id,
+                title=title,
+                message=message,
+                type="FEEDBACK_INTERN",
+                link_url="/feedbacks",
+                send_email=True
+            )
+
+        # Notify mentor (self notify)
+        self.notifier.notify_user(
+            user_id=user_id,
+            title="Feedback Submitted",
+            message=f"You evaluated intern {intern.name} with {score}/10.",
+            type="FEEDBACK_SELF",
+            link_url="/feedbacks",
+            send_email=False
         )
 
         return fb.to_dict()
 
-    def mentor_give_feedback_to_project(self, user_id: int, data: dict):
-        self._require(user_id, "EVALUATE_PROJECT")
+    def intern_give_feedback_to_project(self, user_id: int, data: dict):
+        intern = self.user_repo.get_by_id(user_id).intern_profile
 
-        score = data.get("rating") or data.get("score")
+        if not intern:
+            raise PermissionError("You are not an intern")
+
         project_id = data.get("project_id")
+        score = data.get("score")
+        comment = data.get("comment") or ""
 
-        if not project_id or score is None:
-            raise BadRequest("Missing project_id or score")
+        if project_id is None:
+            raise ValueError("project_id is required")
+        if score is None:
+            raise ValueError("score is required")
 
         project = self.project_repo.get_by_id(project_id)
+
         if not project:
-            raise NotFound("Project not found")
+            raise ValueError("Project not found")
 
-        fb = self.feedback_repo.create({
-            "type": FeedbackType.TRAINER_PROJECT,
-            "score": score,
-            "comment": data.get("comment"),
-            "from_user_id": user_id,
-            "to_intern_id": None,
-            "to_project_id": project_id
-        })
+        existing = self.feedback_repo.get_by_user_and_project(user_id, project_id)
 
-        self.notification_service.notify_user(
-            project.created_by if hasattr(project, "created_by") else user_id,
-            "New Project Evaluation",
-            f"Your project received a new evaluation: {score} points.",
-            type="feedback"
+        if existing:
+            fb = self.feedback_repo.update(existing.id, {
+                "score": score,
+                "comment": comment,
+            })
+            created = False
+        else:
+            fb = self.feedback_repo.create({
+                "from_user_id": user_id,
+                "to_intern_id": intern.id,
+                "to_project_id": project_id,
+                "score": score,
+                "comment": comment,
+                "type": FeedbackType.INTERN_PROJECT,
+                "created_at": datetime.utcnow()
+            })
+            created = True
+
+        receivers = set()
+
+        if getattr(project, "owner_id", None):
+            receivers.add(project.owner_id)
+
+        if getattr(project, "mentor_id", None):
+            receivers.add(project.mentor_id)
+
+        title = "New Feedback on Project" if created else "Project Feedback Updated"
+        message = f"{intern.name} rated project '{project.title}' {score}/10."
+
+        for uid in receivers:
+            self.notifier.notify_user(
+                user_id=uid,
+                title=title,
+                message=message,
+                type="FEEDBACK_PROJECT",
+                link_url=f"/projects/{project_id}",
+                send_email=True
+            )
+
+        # Self notify
+        self.notifier.notify_user(
+            user_id=user_id,
+            title="Feedback Submitted",
+            message=f"You rated project '{project.title}' {score}/10.",
+            type="FEEDBACK_SELF",
+            link_url=f"/projects/{project_id}",
+            send_email=False
         )
 
         return fb.to_dict()
 
-    def get_feedback_for_intern(self, user_id: int, intern_id: int):
-        self._require(user_id, "FEEDBACK_VIEW")
+    def mentor_give_feedback_to_project(self, mentor_id: int, data: dict):
+        self.permission_repo.ensure(mentor_id, "EVALUATE_PROJECT")
 
-        intern = self.intern_repo.get_by_id(intern_id)
-        if not intern:
-            raise NotFound("Intern not found")
+        project_id = data.get("project_id")
+        score = data.get("score")
+        comment = data.get("comment") or ""
 
-        items = self.feedback_repo.get_for_intern(intern_id)
-        return [f.to_dict() for f in items]
-
-    def get_feedback_for_project(self, user_id: int, project_id: int):
-        self._require(user_id, "FEEDBACK_VIEW")
+        if project_id is None:
+            raise ValueError("project_id is required")
+        if score is None:
+            raise ValueError("score is required")
 
         project = self.project_repo.get_by_id(project_id)
-        if not project:
-            raise NotFound("Project not found")
 
-        items = self.feedback_repo.get_for_project(project_id)
-        return [f.to_dict() for f in items]
+        fb = self.feedback_repo.create({
+            "from_user_id": mentor_id,
+            "to_project_id": project_id,
+            "score": score,
+            "comment": comment,
+            "type": FeedbackType.TRAINER_PROJECT,
+            "created_at": datetime.utcnow()
+        })
+
+        mentor = self.user_repo.get_by_id(mentor_id)
+
+        receivers = set()
+
+        if getattr(project, "owner_id", None):
+            receivers.add(project.owner_id)
+
+        if getattr(project, "mentor_id", None):
+            receivers.add(project.mentor_id)
+
+        title = "New Project Evaluation"
+        message = f"{mentor.username} evaluated project '{project.title}' with {score}/10."
+
+        for uid in receivers:
+            self.notifier.notify_user(
+                user_id=uid,
+                title=title,
+                message=message,
+                type="FEEDBACK_PROJECT",
+                link_url=f"/projects/{project_id}",
+                send_email=True
+            )
+
+        # Self notify
+        self.notifier.notify_user(
+            user_id=mentor_id,
+            title="Feedback Submitted",
+            message=f"You evaluated project '{project.title}' with {score}/10.",
+            type="FEEDBACK_SELF",
+            link_url=f"/projects/{project_id}",
+            send_email=False
+        )
+
+        return fb.to_dict()
+
+    def get_feedback_for_intern(self, requester_id: int, intern_id: int):
+        return [f.to_dict() for f in self.feedback_repo.get_for_intern(intern_id)]
+
+    def get_feedback_for_project(self, requester_id: int, project_id: int):
+        return [f.to_dict() for f in self.feedback_repo.get_for_project(project_id)]
 
     def update_feedback(self, user_id: int, feedback_id: int, data: dict):
-        self._require(user_id, "FEEDBACK_CREATE_PROJECT")
-
         fb = self.feedback_repo.get_by_id(feedback_id)
+
         if not fb:
-            raise NotFound("Feedback not found")
+            raise ValueError("Feedback not found")
 
-        score = data.get("score")
-        comment = data.get("comment")
+        if fb.from_user_id != user_id:
+            raise PermissionError("You can only update your own feedback")
 
-        if score is None:
-            raise BadRequest("Missing score")
+        updated = self.feedback_repo.update(feedback_id, data)
 
-        updated = self.feedback_repo.update(feedback_id, {
-            "score": score,
-            "comment": comment
-        })
+        targets = self._get_feedback_target_user_ids(updated)
+
+        for uid in targets:
+            self.notifier.notify_user(
+                user_id=uid,
+                title="Feedback Updated",
+                message="A feedback related to you has been updated.",
+                type="FEEDBACK_UPDATE",
+                link_url="/feedbacks",
+                send_email=True
+            )
+
+        self.notifier.notify_user(
+            user_id=user_id,
+            title="Feedback Updated",
+            message="You updated your feedback.",
+            type="FEEDBACK_SELF",
+            link_url="/feedbacks",
+            send_email=False
+        )
 
         return updated.to_dict()
 
     def delete_feedback(self, user_id: int, feedback_id: int):
-        self._require(user_id, "FEEDBACK_DELETE")
+        self.permission_repo.ensure(user_id, "FEEDBACK_DELETE")
 
         fb = self.feedback_repo.get_by_id(feedback_id)
-        if not fb:
-            raise NotFound("Feedback not found")
 
-        self.feedback_repo.delete(feedback_id)
-        return True
+        if not fb:
+            raise ValueError("Feedback not found")
+
+        targets = self._get_feedback_target_user_ids(fb)
+
+        deleted = self.feedback_repo.soft_delete(feedback_id)
+
+        if deleted:
+            for uid in targets:
+                self.notifier.notify_user(
+                    user_id=uid,
+                    title="Feedback Deleted",
+                    message="A feedback related to you has been removed.",
+                    type="FEEDBACK_DELETE",
+                    link_url="/feedbacks",
+                    send_email=True
+                )
+
+            self.notifier.notify_user(
+                user_id=user_id,
+                title="Feedback Deleted",
+                message="You removed a feedback.",
+                type="FEEDBACK_SELF",
+                link_url="/feedbacks",
+                send_email=False
+            )
+
+        return True if deleted else False
+
+    def _get_feedback_target_user_ids(self, fb):
+        ids = set()
+
+        if fb.to_intern_id:
+            intern = self.intern_repo.get_by_id(fb.to_intern_id)
+            if intern and intern.user_id:
+                ids.add(intern.user_id)
+
+        if fb.to_project_id:
+            project = self.project_repo.get_by_id(fb.to_project_id)
+
+            if getattr(project, "owner_id", None):
+                ids.add(project.owner_id)
+
+            if getattr(project, "mentor_id", None):
+                ids.add(project.mentor_id)
+
+        return list(ids)

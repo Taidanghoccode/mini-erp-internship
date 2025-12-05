@@ -17,18 +17,15 @@ class ReportUC:
         project_repo=None,
         feedback_repo=None
     ):
-        # Nếu có report_repo riêng thì dùng, không thì tạo mới
         self.report_repo = report_repo or ReportRepo()
         self.permission_repo = permission_repo or PermissionRepo()
-        
-        # Backward compatibility với code cũ
         self.intern_repo = intern_repo
         self.project_repo = project_repo
         self.feedback_repo = feedback_repo
 
     def _check(self, user_id):
-        if not self.permission_repo.user_has(user_id, "REPORT_VIEW"):
-            raise PermissionError("Missing permission: REPORT_VIEW")
+        if not self.permission_repo.user_has(user_id, "VIEW_REPORT"):
+            raise PermissionError("Missing permission: VIEW_REPORT")
 
     def export_report(self, user_id, payload):
         self._check(user_id)
@@ -87,14 +84,11 @@ class ReportUC:
         total = len(projects)
         in_progress = total - completed
 
-        # Đếm theo major
         major_stats = {}
         for i in interns:
             major = i.major or "Chưa phân loại"
             major_stats[major] = major_stats.get(major, 0) + 1
 
-        # Đếm theo trạng thái feedback
-        # Phân biệt feedback cho intern (scale 10) và project (scale 5)
         intern_ratings = {"excellent": 0, "good": 0, "average": 0, "poor": 0}
         project_ratings = {"5_star": 0, "4_star": 0, "3_star": 0, "2_star": 0, "1_star": 0}
         
@@ -102,9 +96,7 @@ class ReportUC:
             try:
                 score = float(f.score) if hasattr(f, 'score') else 0
                 
-                # Kiểm tra feedback cho intern hay project
                 if hasattr(f, 'to_intern_id') and f.to_intern_id:
-                    # Feedback cho intern - scale 0-10
                     if score >= 9:
                         intern_ratings["excellent"] += 1
                     elif score >= 7:
@@ -115,7 +107,6 @@ class ReportUC:
                         intern_ratings["poor"] += 1
                         
                 elif hasattr(f, 'to_project_id') and f.to_project_id:
-                    # Feedback cho project - scale 1-5 sao
                     if score >= 4.5:
                         project_ratings["5_star"] += 1
                     elif score >= 3.5:
@@ -266,3 +257,7 @@ class ReportUC:
 
     def _clean_dict(self, d):
         return {k: v for k, v in d.items() if k not in ["is_deleted", "password_hash"]}
+    
+    def get_majors(self, user_id):
+        self._check(user_id)
+        return self.report_repo.get_distinct_majors()

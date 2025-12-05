@@ -11,7 +11,6 @@ def create_app():
 
     with app.app_context():
         load_models()
-        db.create_all()
         print("Database tables created successfully.")
 
     from app.api.health_controller import bp as health_bp

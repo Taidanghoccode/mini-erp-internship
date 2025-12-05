@@ -18,42 +18,45 @@
     </div>
 </div>
 
+{% if current_user.role.code == "ADMIN" %}
 <div class="card">
     <h2><i class="fa-solid fa-clock-rotate-left"></i> Recent Activities</h2>
     <div id="activityLogs"></div>
 </div>
+{% endif %}
+fix b
 
 <script>
-document.addEventListener("DOMContentLoaded", loadProfile);
+    document.addEventListener("DOMContentLoaded", loadProfile);
 
-async function loadProfile() {
-    const token = localStorage.getItem("token");
+    async function loadProfile() {
+        const token = localStorage.getItem("token");
 
-    const res = await fetch("/api/users/profile", {
-        headers: { "Authorization": "Bearer " + token }
-    });
+        const res = await fetch("/api/users/profile", {
+            headers: { "Authorization": "Bearer " + token }
+        });
 
-    if (!res.ok) return;
-    const data = await res.json();
+        if (!res.ok) return;
+        const data = await res.json();
 
-    const user = data.user;
-    const perms = data.permissions;
-    const logs = data.activity_logs;
+        const user = data.user;
+        const perms = data.permissions;
+        const logs = data.activity_logs;
 
-    document.getElementById("accountInfo").innerHTML = `
+        document.getElementById("accountInfo").innerHTML = `
         <p><b>Username:</b> ${user.username}</p>
         <p><b>Email:</b> ${user.email}</p>
         <p><b>Role:</b> ${user.role_name || "-"}</p>
         <p><b>Created At:</b> ${user.created_at}</p>
     `;
 
-    let permHTML = "";
-    perms.forEach(p => permHTML += `<li>✔ ${p}</li>`);
-    document.getElementById("permList").innerHTML = permHTML || "<p>No permissions</p>";
+        let permHTML = "";
+        perms.forEach(p => permHTML += `<li>✔ ${p}</li>`);
+        document.getElementById("permList").innerHTML = permHTML || "<p>No permissions</p>";
 
-    let logHTML = "";
-    logs.forEach(l => {
-        logHTML += `
+        let logHTML = "";
+        logs.forEach(l => {
+            logHTML += `
         <div class="feedback-item">
             <div>
                 <b>${l.action}</b><br>
@@ -61,10 +64,10 @@ async function loadProfile() {
             </div>
             <div><small>${l.timestamp}</small></div>
         </div>`;
-    });
+        });
 
-    document.getElementById("activityLogs").innerHTML = logHTML || "<p>No activity yet.</p>";
-}
+        document.getElementById("activityLogs").innerHTML = logHTML || "<p>No activity yet.</p>";
+    }
 </script>
 
 {% endblock %}

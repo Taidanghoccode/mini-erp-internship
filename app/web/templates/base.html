@@ -47,132 +47,305 @@
     </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    checkLogin();
-    applyMenuPermissions();
-    initHeaderDropdown();
-    loadNotifications();
-    setInterval(loadNotifications, 5000);
-});
+(() => {
+    let notificationPollInterval = null;
+    let tokenRefreshInterval = null;
 
-/* Login check */
-function checkLogin() {
-    if (!window.location.pathname.startsWith("/login")) {
-        const token = localStorage.getItem("token");
-        if (!token) window.location.href = "/login";
-    }
-}
+    document.addEventListener("DOMContentLoaded", () => {
+        ensureLogin();
+        setupTokenRefresh();
+        applyMenuPermissions();
+        initUserMenu();
+        initNotificationBell();
+        startPollingNotifications();
+    });
 
-/* Menu permission */
-function applyMenuPermissions() {
-    const perms = JSON.parse(localStorage.getItem("permissions") || "[]");
-
-    const menuRules = [
-        { id: "menu-interns", perm: "INTERN_VIEW" },
-        { id: "menu-projects", perm: "PROJECT_VIEW" },
-        { id: "menu-feedback", perm: "FEEDBACK_VIEW" },
-        { id: "menu-training", perm: "TRAININGPLAN_VIEW" },
-        { id: "menu-reports", perm: "VIEW_REPORT" },
-        { id: "menu-users", perm: "USER_MANAGE" },
-        { id: "menu-roles", perm: "ROLE_MANAGE" }
-    ];
-
-    menuRules.forEach(rule => {
-        const item = document.getElementById(rule.id);
-        if (item && !perms.includes(rule.perm)) {
-            item.style.display = "none";
+    function ensureLogin() {
+        if (!window.location.pathname.startsWith("/login")) {
+            const token = localStorage.getItem("token");
+            if (!token) {
+                redirectToLogin();
+            }
         }
-    });
-}
+    }
 
-/* Dropdown logic */
-function initHeaderDropdown() {
-    const avatar = document.getElementById("userAvatar");
-    const menu = document.getElementById("dropdownMenu");
-    const bell = document.getElementById("notifBell");
-    const notif = document.getElementById("notifPanel");
+    function redirectToLogin() {
+        localStorage.clear();
+        window.location.href = "/login";
+    }
 
-    if (!avatar || !menu) return;
+    function setupTokenRefresh() {
+        const refreshIntervalMs = 25 * 60 * 1000; // 25 minutes
 
-    avatar.addEventListener("click", (e) => {
-        e.stopPropagation();
-        menu.classList.toggle("show");
-        notif.classList.remove("open");
-    });
+        if (tokenRefreshInterval) {
+            clearInterval(tokenRefreshInterval);
+        }
 
-    bell.addEventListener("click", (e) => {
-        e.stopPropagation();
-        notif.classList.toggle("open");
-        menu.classList.remove("show");
-    });
+        refreshAccessToken();
 
-    document.addEventListener("click", () => {
-        menu.classList.remove("show");
-        notif.classList.remove("open");
-    });
+        tokenRefreshInterval = setInterval(refreshAccessToken, refreshIntervalMs);
+    }
 
-    menu.addEventListener("click", (e) => e.stopPropagation());
-    notif.addEventListener("click", (e) => e.stopPropagation());
-}
-
-/* Load Notifications */
-async function loadNotifications() {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-        const res = await fetch("/api/notifications?unread=true", {
-            headers: { "Authorization": "Bearer " + token }
-        });
-
-        if (!res.ok) return;
-
-        const items = await res.json();
-        const panel = document.getElementById("notifPanel");
-        const count = document.getElementById("notifCount");
-
-        panel.innerHTML = "";
-
-        if (!items.length) {
-            count.style.display = "none";
-            panel.innerHTML = "<div class='notif-empty'>No notifications</div>";
+    async function refreshAccessToken() {
+        if (window.location.pathname.startsWith("/login")) {
             return;
         }
 
-        count.style.display = "block";
-        count.textContent = items.length;
+        try {
+            const response = await fetch("/api/auth/refresh", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" }
+            });
 
-        items.forEach(n => {
-            panel.innerHTML += `
-                <div class="notif-item">
-                    <div class="notif-title">${n.title}</div>
-                    <div class="notif-msg">${n.message}</div>
-                    <div class="notif-time">${n.created_at}</div>
-                </div>
-            `;
+            if (response.ok) {
+                const data = await response.json();
+                
+                localStorage.setItem("token", data.token);
+                localStorage.setItem("user", JSON.stringify(data.user));
+                localStorage.setItem("permissions", JSON.stringify(data.permissions));
+                localStorage.setItem("role", data.role_code);
+                localStorage.setItem("intern_id", data.intern_id);
+
+                console.log("Token refreshed successfully");
+            } else if (response.status === 401) {
+                console.log("Session expired, redirecting to login");
+                redirectToLogin();
+            }
+        } catch (error) {
+            console.error("Token refresh error:", error);
+        }
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        let response = await originalFetch.apply(this, args);
+
+        if (response.status === 401 && 
+            !args[0].includes("/login") && 
+            !args[0].includes("/refresh")) {
+            
+            const refreshSuccess = await attemptTokenRefresh();
+            
+            if (refreshSuccess) {
+                const newToken = localStorage.getItem("token");
+                if (args[1] && args[1].headers) {
+                    if (args[1].headers instanceof Headers) {
+                        args[1].headers.set("Authorization", "Bearer " + newToken);
+                    } else if (typeof args[1].headers === "object") {
+                        args[1].headers["Authorization"] = "Bearer " + newToken;
+                    }
+                }
+                response = await originalFetch.apply(this, args);
+            } else {
+                redirectToLogin();
+            }
+        }
+
+        return response;
+    };
+
+    async function attemptTokenRefresh() {
+        try {
+            const response = await originalFetch("/api/auth/refresh", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem("token", data.token);
+                localStorage.setItem("user", JSON.stringify(data.user));
+                localStorage.setItem("permissions", JSON.stringify(data.permissions));
+                localStorage.setItem("role", data.role_code);
+                localStorage.setItem("intern_id", data.intern_id);
+                return true;
+            }
+        } catch (error) {
+            console.error("Token refresh attempt failed:", error);
+        }
+        return false;
+    }
+
+    function applyMenuPermissions() {
+        const perms = JSON.parse(localStorage.getItem("permissions") || "[]");
+
+        const menuRules = [
+            { id: "menu-interns", perm: "INTERN_VIEW" },
+            { id: "menu-projects", perm: "PROJECT_VIEW" },
+            { id: "menu-feedback", perm: "FEEDBACK_VIEW" },
+            { id: "menu-training", perm: "TRAININGPLAN_VIEW" },
+            { id: "menu-reports", perm: "VIEW_REPORT" },
+            { id: "menu-users", perm: "USER_MANAGE" },
+            { id: "menu-roles", perm: "ROLE_MANAGE" }
+        ];
+
+        menuRules.forEach(rule => {
+            const item = document.getElementById(rule.id);
+            if (item && !perms.includes(rule.perm)) {
+                item.style.display = "none";
+            }
+        });
+    }
+
+    function initUserMenu() {
+        const avatar = document.getElementById("userAvatar");
+        const menu = document.getElementById("dropdownMenu");
+
+        if (!avatar || !menu) return;
+
+        avatar.onclick = e => {
+            e.stopPropagation();
+            menu.classList.toggle("show");
+            const panel = document.getElementById("notifPanel");
+            if (panel) {
+                panel.classList.remove("open");
+            }
+        };
+
+        document.addEventListener("click", () => {
+            menu.classList.remove("show");
+        });
+    }
+
+    function initNotificationBell() {
+        const bell = document.getElementById("notifBell");
+        const panel = document.getElementById("notifPanel");
+
+        if (!bell || !panel) return;
+
+        bell.onclick = async e => {
+            e.stopPropagation();
+            panel.classList.toggle("open");
+
+            if (panel.classList.contains("open")) {
+                await loadNotifications(true); 
+            }
+        };
+
+        document.addEventListener("click", async () => {
+            if (panel.classList.contains("open")) {
+                panel.classList.remove("open");
+                await markAllRead();
+                await loadNotifications(true);
+            }
         });
 
-    } catch (err) {
-        console.error(err);
+        panel.onclick = e => e.stopPropagation();
     }
-}
 
-function handleLogout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("permissions");
-    window.location.href = "/login";
-}
-</script>
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-    const token = localStorage.getItem("token");
-    if (token) {
-        fetch(window.location.href, {
-            headers: { "Authorization": "Bearer " + token }
-        });
+    function startPollingNotifications() {
+        loadNotifications();
+
+        if (notificationPollInterval)
+            clearInterval(notificationPollInterval);
+
+        notificationPollInterval = setInterval(loadNotifications, 3000);
     }
-});
+
+    async function markAllRead() {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        try {
+            await fetch("/api/notifications/read-all", {
+                method: "PUT",
+                headers: { "Authorization": "Bearer " + token }
+            });
+        } catch (e) {
+            console.error("markAllRead error", e);
+        }
+    }
+
+    window.loadNotifications = async function(force = false) {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        const panel = document.getElementById("notifPanel");
+        const count = document.getElementById("notifCount");
+        if (!panel || !count) return;
+
+        try {
+            const [allRes, unreadRes] = await Promise.all([
+                fetch("/api/notifications", {
+                    headers: { "Authorization": "Bearer " + token }
+                }),
+                fetch("/api/notifications?unread=true", {
+                    headers: { "Authorization": "Bearer " + token }
+                })
+            ]);
+
+            if (!allRes.ok || !unreadRes.ok) {
+                console.error("Notification API error", allRes.status, unreadRes.status);
+                return;
+            }
+
+            const all = await allRes.json();
+            const unread = await unreadRes.json();
+            const unreadCount = Array.isArray(unread) ? unread.length : 0;
+
+            if (unreadCount > 0) {
+                count.style.display = "block";
+                count.textContent = unreadCount > 99 ? "99+" : unreadCount;
+            } else {
+                count.style.display = "none";
+                count.textContent = "";
+            }
+
+            renderNotifications(all);
+
+        } catch (err) {
+            console.error("loadNotifications error", err);
+        }
+    }
+
+    function renderNotifications(list) {
+        const panel = document.getElementById("notifPanel");
+
+        if (!panel) return;
+
+        if (!Array.isArray(list) || list.length === 0) {
+            panel.innerHTML = `<div class="notif-empty">No notifications</div>`;
+            return;
+        }
+
+        panel.innerHTML = list.map(n => `
+            <div class="notif-item ${n.is_read ? "" : "unread"}">
+                <div class="notif-title">${escapeHtml(n.title)}</div>
+                <div class="notif-msg">${escapeHtml(n.message)}</div>
+                <div class="notif-time">${escapeHtml(n.created_at)}</div>
+            </div>
+        `).join("");
+    }
+
+    function escapeHtml(t) {
+        const d = document.createElement("div");
+        d.textContent = t || "";
+        return d.innerHTML;
+    }
+
+    window.handleLogout = function() {
+        if (tokenRefreshInterval) {
+            clearInterval(tokenRefreshInterval);
+        }
+        if (notificationPollInterval) {
+            clearInterval(notificationPollInterval);
+        }
+        
+        fetch("/api/auth/logout", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
+        }).finally(() => {
+            localStorage.clear();
+            window.location.href = "/login";
+        });
+    };
+
+})();
 </script>
+
+<script src="{{ url_for('web_bp.static', filename='js/permission.js') }}"></script>
+
 </body>
 </html>

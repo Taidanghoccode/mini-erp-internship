@@ -8,17 +8,11 @@ from datetime import datetime
 class ReportRepo:
 
     def get_interns(self, filters):
-        """
-        Lấy danh sách sinh viên thực tập với bộ lọc
-        Filters: major, date_from, date_to
-        """
         query = Intern.query.filter_by(is_deleted=False)
 
-        # Lọc theo ngành
         if filters.get("major"):
             query = query.filter(Intern.major == filters["major"])
 
-        # Lọc theo ngày bắt đầu
         date_from = filters.get("date_from")
         if date_from and isinstance(date_from, str) and date_from.strip():
             try:
@@ -38,17 +32,11 @@ class ReportRepo:
         return query.all()
 
     def get_projects(self, filters):
-        """
-        Lấy danh sách dự án với bộ lọc
-        Filters: status, date_from, date_to
-        """
         query = Project.query.filter_by(is_deleted=False)
 
-        # Lọc theo trạng thái
         if filters.get("status"):
             query = query.filter(Project.status == filters["status"])
 
-        # Lọc theo ngày tạo hoặc ngày bắt đầu (tùy model của bạn)
         if filters.get("date_from") and hasattr(Project, 'created_at'):
             try:
                 df = datetime.fromisoformat(filters["date_from"])
@@ -66,21 +54,12 @@ class ReportRepo:
         return query.all()
 
     def get_feedback(self, filters):
-        """
-        Lấy danh sách feedback với bộ lọc
-        Filters: intern_id, project_id, date_from, date_to
-        """
         query = Feedback.query.filter_by(is_deleted=False)
-
-        # Lọc theo intern_id
         if filters.get("intern_id"):
             query = query.filter(Feedback.to_intern_id == filters["intern_id"])
-
-        # Lọc theo project_id
         if filters.get("project_id"):
             query = query.filter(Feedback.to_project_id == filters["project_id"])
 
-        # Lọc theo ngày tạo feedback
         if filters.get("date_from") and hasattr(Feedback, 'created_at'):
             try:
                 df = datetime.fromisoformat(filters["date_from"])
@@ -96,3 +75,7 @@ class ReportRepo:
                 pass
 
         return query.all()
+    
+    def get_distinct_majors(self):
+        q = db.session.query(Intern.major).distinct().all()
+        return [m[0] for m in q if m[0]]

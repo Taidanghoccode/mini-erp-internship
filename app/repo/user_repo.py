@@ -3,6 +3,8 @@ from app.db.db import db
 from app.repo.base_repo import BaseRepo
 from app.interfaces.user_port import UserRepoInterface
 from sqlalchemy.orm import joinedload
+from app.models.role import Role
+
 
 class UserRepo(BaseRepo, UserRepoInterface):
     
@@ -10,8 +12,14 @@ class UserRepo(BaseRepo, UserRepoInterface):
         return User.query.options(joinedload(User.role)).filter_by(is_deleted=False).all()
 
     def get_by_id(self, user_id):
-        user = User.query.options(joinedload(User.role)).get(user_id)
-        return user if user and not user.is_deleted else None
+        return (
+            User.query.options(
+                joinedload(User.role).joinedload(Role.permissions)
+            )
+            .filter_by(id=user_id, is_deleted=False)
+            .first()
+        )
+
 
     def get_by_email(self, email):
         return User.query.filter_by(email=email, is_deleted=False).first()

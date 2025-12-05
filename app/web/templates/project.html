@@ -119,14 +119,22 @@ function cardHtml(p){
           <div class="badge-small">${p.intern_count||0} interns</div>
         </div>
         <div class="card-actions">
-          <button class="btn-icon btn-view" onclick="viewDetail(${p.id})"><i class="fa-solid fa-eye"></i></button>
+          <button class="btn-icon btn-view" onclick="viewDetail(${p.id || p.project_id})"><i class="fa-solid fa-eye"></i></button>
           <button class="btn-icon btn-edit" onclick="openEdit(${p.id}, '${esc(p.title)}', '${esc(p.description||"")}', '${p.status||"new"}')"><i class="fa-solid fa-pen"></i></button>
           <button class="btn-icon btn-delete" onclick="deleteProject(${p.id})"><i class="fa-solid fa-trash"></i></button>
         </div>
+        
       </div>
       <p style="margin:6px 0 10px 0;">${p.description||""}</p>
+      <div class="rating" style="margin: 6px 0 10px 0; font-size:14px; color:#f59e0b;">
+    ⭐ <b>${p.rating || 0}</b>
+    <span style="color:#555;">(${p.rating_count || 0})</span>
+</div>
+
       ${statusBtn("new",p)} ${statusBtn("progress",p)} ${statusBtn("done",p)}
     </div>
+    
+
   `;
 }
 

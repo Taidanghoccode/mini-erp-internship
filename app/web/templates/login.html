@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Mini ERP</title>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 
     <style>
         * {
@@ -88,16 +88,11 @@
             border-radius: 8px;
             font-size: 15px;
             transition: border-color 0.2s;
-            background: #fff;
         }
 
         .input:focus {
             outline: none;
             border-color: #005baa;
-        }
-
-        .input::placeholder {
-            color: #a0aec0;
         }
 
         .btn-login {
@@ -111,7 +106,6 @@
             font-weight: 600;
             cursor: pointer;
             margin-top: 10px;
-            transition: background 0.2s;
         }
 
         .btn-login:hover {
@@ -129,23 +123,14 @@
             font-size: 13px;
             color: #a0aec0;
         }
-
-        @media (max-width: 480px) {
-            .login-card {
-                padding: 40px 30px;
-            }
-        }
     </style>
-
 </head>
 
 <body>
 
     <div class="login-card">
         <div class="login-header">
-            <div class="logo">
-                <i class="fa-solid fa-building"></i>
-            </div>
+            <div class="logo"><i class="fa-solid fa-building"></i></div>
             <div class="login-title">Mini ERP</div>
             <div class="login-subtitle">Sign in to your account</div>
         </div>
@@ -155,86 +140,75 @@
         <form onsubmit="handleLogin(event)">
             <div class="form-group">
                 <label for="identifier">Username or Email</label>
-                <input 
-                    type="text" 
-                    id="identifier" 
-                    class="input" 
-                    placeholder="Enter username or email"
-                    required
-                >
+                <input type="text" id="identifier" class="input" placeholder="Enter username or email" required>
             </div>
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input 
-                    type="password" 
-                    id="password" 
-                    class="input" 
-                    placeholder="Enter password"
-                    required
-                >
+                <input type="password" id="password" class="input" placeholder="Enter password" required>
             </div>
 
-            <button type="submit" class="btn-login" id="loginBtn">
-                Login
-            </button>
+            <button type="submit" class="btn-login" id="loginBtn">Login</button>
         </form>
 
         <div class="login-footer">
-            © Mini ERP Internship Management 
+            © Mini ERP Internship Management
         </div>
     </div>
 
-<script>
-async function handleLogin(event) {
-    event.preventDefault();
-    
-    const id = document.getElementById("identifier").value.trim();
-    const pw = document.getElementById("password").value.trim();
-    const errorBox = document.getElementById("errorBox");
-    const loginBtn = document.getElementById("loginBtn");
+    <script>
+        async function handleLogin(event) {
+            event.preventDefault();
 
-    if (!id || !pw) {
-        errorBox.textContent = "Please enter username/email and password.";
-        errorBox.style.display = "block";
-        return;
-    }
+            const id = document.getElementById("identifier").value.trim();
+            const pw = document.getElementById("password").value.trim();
+            const errorBox = document.getElementById("errorBox");
+            const loginBtn = document.getElementById("loginBtn");
 
-    errorBox.style.display = "none";
-    loginBtn.disabled = true;
-    loginBtn.textContent = "Logging in...";
+            if (!id || !pw) {
+                errorBox.textContent = "Please enter username/email and password.";
+                errorBox.style.display = "block";
+                return;
+            }
 
-    try {
-        const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ identifier: id, password: pw })
-        });
+            errorBox.style.display = "none";
+            loginBtn.disabled = true;
+            loginBtn.textContent = "Logging in...";
 
-        const data = await res.json();
+            try {
+                const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ identifier: id, password: pw })
+                });
 
-        if (!res.ok) {
-            errorBox.textContent = data.error || "Login failed";
-            errorBox.style.display = "block";
-            loginBtn.disabled = false;
-            loginBtn.textContent = "Login";
-            return;
+                const data = await res.json();
+
+                if (!res.ok) {
+                    errorBox.textContent = data.error || "Login failed";
+                    errorBox.style.display = "block";
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = "Login";
+                    return;
+                }
+
+                localStorage.setItem("token", data.token);
+                localStorage.setItem("user", JSON.stringify(data.user));
+                localStorage.setItem("permissions", JSON.stringify(data.permissions));
+                localStorage.setItem("role", data.role_code);
+                localStorage.setItem("intern_id", data.intern_id);
+
+                window.location.href = "/";
+            }
+            catch (err) {
+                errorBox.textContent = "Cannot connect to server.";
+                errorBox.style.display = "block";
+                loginBtn.disabled = false;
+                loginBtn.textContent = "Login";
+            }
         }
-
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        localStorage.setItem("permissions", JSON.stringify(data.permissions));
-
-        window.location.href = "/";
-    }
-    catch (err) {
-        errorBox.textContent = "Cannot connect to server.";
-        errorBox.style.display = "block";
-        loginBtn.disabled = false;
-        loginBtn.textContent = "Login";
-    }
-}
-</script>
+    </script>
 
 </body>
+
 </html>

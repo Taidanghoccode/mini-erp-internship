@@ -3,38 +3,106 @@
 {% block content %}
 
 <style>
-#toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 99999 !important;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.toast-msg {
-    padding: 12px 16px;
-    border-radius: 8px;
-    color: #fff;
-    font-weight: 600;
-    box-shadow: var(--shadow-md);
-    animation: fadein .2s ease, fadeout .3s ease 2.5s forwards;
-}
-.toast-success { background: #16a34a; }
-.toast-error { background: #dc2626; }
-.toast-info { background: #2563eb; }
+    #toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999 !important;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
 
-@keyframes fadein { from { opacity: 0; transform: translateY(-8px);} to { opacity: 1;} }
-@keyframes fadeout { from { opacity: 1;} to { opacity: 0; transform: translateY(-8px);} }
+    .toast-msg {
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: #333;
+        color: #fff;
+        animation: fadein 0.2s ease-in-out;
+    }
 
-.modal { z-index: 5000 !important; }
+    .toast-success {
+        background: #28a745 !important;
+    }
+
+    .toast-error {
+        background: #dc3545 !important;
+    }
+
+    .modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        display: none;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .modal.show {
+        display: flex;
+    }
+
+    .modal-content {
+        background: #fff;
+        padding: 20px;
+        width: 450px;
+        border-radius: 10px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal input,
+    .modal select {
+        width: 100%;
+        padding: 10px;
+        margin: 6px 0;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
+
+    .btn-primary {
+        background: #1877f2;
+        color: #fff;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .btn-success {
+        background: #28a745;
+        color: #fff;
+        padding: 8px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .btn-icon i {
+        font-size: 14px;
+    }
+
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        padding: 12px 10px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    thead {
+        background: #f8fafc;
+    }
 </style>
 
 <div id="toast"></div>
 
 <div class="header">
     <h1><i class="fa-solid fa-user-graduate"></i> Interns</h1>
-    <div class="filter-row">
+    <div class="filter-row" style="display:flex; gap:10px;">
         <input id="searchInput" placeholder="Search name...">
         <select id="filterMajor">
             <option value="">Major (All)</option>
@@ -43,7 +111,8 @@
             <option>Design</option>
         </select>
         <button onclick="loadInterns()" class="btn-primary">Search</button>
-        <button onclick="openCreateModal()" class="btn-success">
+
+        <button onclick="openCreateModal()" class="btn-success" data-permission="INTERN_CREATE">
             <i class="fa fa-plus"></i> Add Intern
         </button>
     </div>
@@ -66,283 +135,243 @@
     </table>
 </div>
 
-<!-- Modal -->
 <div class="modal" id="internModal">
     <div class="modal-content">
         <h3 id="modalTitle">Add Intern</h3>
 
-        <input id="m-name" placeholder="Name" oninput="validateNameLive()">
-        <input id="m-email" placeholder="Email" oninput="validateEmailLive()">
+        <input id="m-name" placeholder="Name">
+        <input id="m-email" placeholder="Email">
         <input id="m-university" placeholder="University">
         <input id="m-major" placeholder="Major">
 
-        <!-- Linked User -->
-        <select id="m-user" style="margin-top:10px;">
-            <option value="">-- No linked user --</option>
+        <label>User link:</label>
+        <select id="m-user">
+            <option>-- No linked user --</option>
         </select>
 
-        <button onclick="saveIntern()" class="btn-success" style="width:100%; margin-top:10px;">Save</button>
-        <button onclick="closeModal()" class="btn-danger" style="width:100%; margin-top:10px;">Cancel</button>
+        <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+            <button class="btn-primary" onclick="saveIntern()">Save</button>
+            <button class="btn-delete" onclick="closeModal()">Close</button>
+        </div>
     </div>
 </div>
 
 <script>
-function showToast(msg, type="success"){
-    const box = document.getElementById("toast");
-    const div = document.createElement("div");
-    div.className = `toast-msg toast-${type}`;
-    div.innerHTML = msg;
-    box.appendChild(div);
-    setTimeout(()=> div.remove(), 3000);
-}
+    let editingId = null;
 
-function escapeHtml(text) {
-    if (!text) return "";
-    return text.replace(/&/g, "&amp;")
-               .replace(/</g, "&lt;")
-               .replace(/>/g, "&gt;")
-               .replace(/"/g, "&quot;")
-               .replace(/'/g, "&#039;");
-}
-
-let editingID = null;
-
-function validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function validateEmailLive() {
-    const email = document.getElementById("m-email").value.trim();
-    const input = document.getElementById("m-email");
-    if (!email) { input.style.border = "1px solid #ddd"; return; }
-
-    if (!validateEmail(email)) {
-        input.style.border = "1px solid #dc2626";
-        showToast("Invalid email format", "error");
-    } else {
-        input.style.border = "1px solid #16a34a";
+    function showToast(msg, type = "success") {
+        const box = document.getElementById("toast");
+        const div = document.createElement("div");
+        div.className = `toast-msg toast-${type}`;
+        div.innerHTML = msg;
+        box.appendChild(div);
+        setTimeout(() => div.remove(), 3000);
     }
-}
 
-function validateNameLive() {
-    const name = document.getElementById("m-name").value.trim();
-    const input = document.getElementById("m-name");
-    if (!name) {
-        input.style.border = "1px solid #dc2626";
-        showToast("Name is required", "error");
-    } else {
-        input.style.border = "1px solid #16a34a";
+    function escapeHtml(text) {
+        if (!text) return "";
+        return text.replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
     }
-}
 
-// ---------------- LOAD INTERNS ----------------
-async function loadInterns() {
-    try {
-        const res = await fetch("/api/interns/");
-        const data = await res.json();
+    function openCreateModal() {
+        editingId = null;
 
-        if (!res.ok) {
-            showToast("Error loading interns", "error");
-            return;
+        document.getElementById("modalTitle").innerText = "Add Intern";
+        document.getElementById("m-name").value = "";
+        document.getElementById("m-email").value = "";
+        document.getElementById("m-university").value = "";
+        document.getElementById("m-major").value = "";
+        document.getElementById("m-user").value = "";
+
+        loadUsersForIntern();
+        document.getElementById("internModal").classList.add("show");
+    }
+
+    function openEdit(id, name, email, university, major, userId) {
+        editingId = id;
+
+        document.getElementById("modalTitle").innerText = "Edit Intern";
+        document.getElementById("m-name").value = name || "";
+        document.getElementById("m-email").value = email || "";
+        document.getElementById("m-university").value = university || "";
+        document.getElementById("m-major").value = major || "";
+
+        loadUsersForIntern(userId);
+        document.getElementById("internModal").classList.add("show");
+    }
+
+    function closeModal() {
+        document.getElementById("internModal").classList.remove("show");
+    }
+
+    async function saveIntern() {
+        try {
+            const payload = {
+                name: document.getElementById("m-name").value,
+                email: document.getElementById("m-email").value,
+                university: document.getElementById("m-university").value,
+                major: document.getElementById("m-major").value,
+                user_id: document.getElementById("m-user").value || null
+            };
+
+            const token = localStorage.getItem("token");
+            let url = "/api/interns/";
+            let method = "POST";
+
+            if (editingId) {
+                url = `/api/interns/${editingId}`;
+                method = "PUT";
+            }
+
+            const res = await fetch(url, {
+                method,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                showToast(data.error || (editingId ? "Update failed" : "Create failed"), "error");
+                return;
+            }
+
+            showToast(editingId ? "Intern updated successfully" : "Intern created successfully");
+            closeModal();
+            loadInterns();
+
+        } catch (err) {
+            showToast("Connection error!", "error");
         }
+    }
 
-        let interns = data;
-        const keyword = document.getElementById("searchInput").value.toLowerCase();
-        const majorFilter = document.getElementById("filterMajor").value;
+    async function loadInterns() {
+        try {
+            const res = await fetch("/api/interns/", {
+                headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
+            });
 
-        interns = interns.filter(i =>
-            i.name.toLowerCase().includes(keyword) &&
-            (majorFilter === "" || i.major === majorFilter)
-        );
+            const data = await res.json();
+            if (!res.ok) {
+                showToast("Error loading interns", "error");
+                return;
+            }
 
-        const tbody = document.querySelector("#internTable tbody");
-        tbody.innerHTML = "";
+            let interns = data;
+            const keyword = document.getElementById("searchInput").value.toLowerCase();
+            const majorFilter = document.getElementById("filterMajor").value;
 
-        interns.forEach(i => {
-            const name = escapeHtml(i.name);
-            const email = escapeHtml(i.email);
-            const uni = escapeHtml(i.university || "-");
-            const major = escapeHtml(i.major || "-");
-            const userIdExpr = (i.user_id ?? "null");   // số hoặc "null"
+            interns = interns.filter(i =>
+                i.name.toLowerCase().includes(keyword) &&
+                (majorFilter === "" || i.major === majorFilter)
+            );
 
-            tbody.innerHTML += `
+            const tbody = document.querySelector("#internTable tbody");
+            tbody.innerHTML = "";
+
+            interns.forEach(i => {
+                const name = escapeHtml(i.name);
+                const email = escapeHtml(i.email);
+                const uni = escapeHtml(i.university || "-");
+                const major = escapeHtml(i.major || "-");
+                const rating = i.avg_rating ?? "-";
+                const userIdExpr = (i.user_id ?? "null");
+
+                tbody.innerHTML += `
                 <tr>
                     <td>${name}</td>
                     <td>${email}</td>
                     <td>${uni}</td>
                     <td>${major}</td>
                     <td>${i.project_count || 0}</td>
-                    <td>${i.avg_rating ?? "-"}</td>
+                    <td>${rating}</td>
                     <td>
                         <button class="btn-icon btn-view" onclick="viewDetail(${i.id})">
                             <i class="fa-solid fa-eye"></i>
                         </button>
                         <button class="btn-icon btn-edit"
-                            onclick="openEdit(${i.id}, '${name}', '${email}', '${uni}', '${major}', ${userIdExpr})">
+                                data-permission="INTERN_UPDATE"
+                                onclick="openEdit(${i.id}, '${name}', '${email}', '${uni}', '${major}', ${userIdExpr})">
                             <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button class="btn-icon btn-delete" onclick="deleteIntern(${i.id})">
+                        <button class="btn-icon btn-delete" 
+                                data-permission="INTERN_DELETE"
+                                onclick="deleteIntern(${i.id})">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </td>
                 </tr>`;
-        });
+            });
 
-    } catch (err) {
-        showToast("Connection error!", "error");
-    }
-}
-
-function viewDetail(id) {
-    window.location.href = `/interns/${id}`;
-}
-
-// --------------- LOAD USERS FOR DROPDOWN ----------------
-async function loadUsersForIntern(currentUserId = null) {
-    const sel = document.getElementById("m-user");
-    sel.innerHTML = `<option value="">-- No linked user --</option>`;
-
-    try {
-        // Bạn có thể đổi lại thành /api/users?role=INTERN tuỳ BE
-        const res = await fetch("/api/users/");
-        const users = await res.json();
-
-        if (!res.ok) {
-            showToast(users.error || "Error loading users", "error");
-            return;
-        }
-
-        users.forEach(u => {
-            sel.innerHTML += `<option value="${u.id}">${escapeHtml(u.username)} (${escapeHtml(u.email)})</option>`;
-        });
-
-        if (currentUserId) {
-            sel.value = String(currentUserId);
-
-            // nếu vì lý do nào đó user không có trong list, thì thêm tay
-            if (sel.value === "") {
-                const u = users.find(x => x.id === currentUserId);
-                if (u) {
-                    sel.innerHTML += `<option value="${u.id}">${escapeHtml(u.username)} (${escapeHtml(u.email)})</option>`;
-                    sel.value = String(u.id);
-                } else {
-                    sel.innerHTML += `<option value="${currentUserId}">User #${currentUserId}</option>`;
-                    sel.value = String(currentUserId);
-                }
+            if (window.applyPermissionUI) {
+                window.applyPermissionUI(tbody);
             }
+
+        } catch (err) {
+            showToast("Connection error!", "error");
         }
-
-    } catch (err) {
-        showToast("Error loading users", "error");
-    }
-}
-
-// ---------------- MODAL HANDLING ----------------
-function openCreateModal() {
-    editingID = null;
-    document.getElementById("modalTitle").innerText = "Add Intern";
-
-    document.getElementById("m-name").value = "";
-    document.getElementById("m-email").value = "";
-    document.getElementById("m-university").value = "";
-    document.getElementById("m-major").value = "";
-
-    loadUsersForIntern(null);
-
-    document.getElementById("internModal").style.display = "flex";
-}
-
-function openEdit(id, name, email, uni, major, userId) {
-    editingID = id;
-
-    document.getElementById("modalTitle").innerText = "Edit Intern";
-    document.getElementById("m-name").value = name;
-    document.getElementById("m-email").value = email;
-    document.getElementById("m-university").value = uni;
-    document.getElementById("m-major").value = major;
-
-    loadUsersForIntern(userId);   // 🔥 pre-select linked user
-
-    document.getElementById("internModal").style.display = "flex";
-}
-
-function closeModal() {
-    document.getElementById("internModal").style.display = "none";
-}
-
-// ---------------- SAVE / DELETE ----------------
-async function saveIntern() {
-    const body = {
-        name: document.getElementById("m-name").value.trim(),
-        email: document.getElementById("m-email").value.trim(),
-        university: document.getElementById("m-university").value.trim(),
-        major: document.getElementById("m-major").value.trim(),
-        user_id: document.getElementById("m-user").value || null
-    };
-
-    if (!body.name) {
-        showToast("Name is required", "error");
-        return;
-    }
-    if (!validateEmail(body.email)) {
-        showToast("Invalid email format", "error");
-        return;
     }
 
-    let res;
+    function viewDetail(id) {
+        window.location.href = `/interns/${id}`;
+    }
 
-    try {
-        if (editingID == null) {
-            res = await fetch("/api/interns/", {
-                method: "POST",
-                headers: {"Content-Type":"application/json"},
-                body: JSON.stringify(body)
+    async function loadUsersForIntern(currentUserId = null) {
+        const sel = document.getElementById("m-user");
+        sel.innerHTML = `<option value="">-- No linked user --</option>`;
+
+        try {
+            const res = await fetch("/api/users/", {
+                headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
             });
-        } else {
-            res = await fetch(`/api/interns/${editingID}`, {
-                method: "PUT",
-                headers: {"Content-Type":"application/json"},
-                body: JSON.stringify(body)
+
+            const users = await res.json();
+            if (!res.ok) {
+                showToast(users.error || "Error loading users", "error");
+                return;
+            }
+
+            users.forEach(u => {
+                sel.innerHTML += `<option value="${u.id}">${escapeHtml(u.username)} (${escapeHtml(u.email)})</option>`;
             });
+
+            if (currentUserId) sel.value = currentUserId;
+
+        } catch (err) {
+            showToast("Connection error", "error");
         }
-
-        const result = await res.json();
-
-        if (!res.ok) {
-            showToast(result.error || "Save failed", "error");
-            return;
-        }
-
-        showToast("Saved successfully!", "success");
-        closeModal();
-        loadInterns();
-
-    } catch (err) {
-        showToast("Connection error", "error");
     }
-}
 
-async function deleteIntern(id) {
-    if (!confirm("Delete this intern?")) return;
+    async function deleteIntern(id) {
+        if (!confirm("Delete this intern?")) return;
 
-    try {
-        const res = await fetch(`/api/interns/${id}`, { method:"DELETE" });
+        try {
+            const res = await fetch(`/api/interns/${id}`, {
+                method: "DELETE",
+                headers: { "Authorization": "Bearer " + localStorage.getItem("token") }
+            });
 
-        if (!res.ok) {
-            const err = await res.json();
-            showToast(err.error || "Delete failed", "error");
-            return;
+            if (!res.ok) {
+                const err = await res.json();
+                showToast(err.error || "Delete failed", "error");
+                return;
+            }
+
+            showToast("Deleted successfully", "info");
+            loadInterns();
+
+        } catch (err) {
+            showToast("Connection error", "error");
         }
-
-        showToast("Deleted successfully", "info");
-        loadInterns();
-
-    } catch (err) {
-        showToast("Connection error", "error");
     }
-}
 
-loadInterns();
+    loadInterns();
 </script>
 
 {% endblock %}

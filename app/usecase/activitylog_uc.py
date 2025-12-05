@@ -18,8 +18,6 @@ class ActivityLogUC:
         logs = self.activitylog_repo.get_all()
         return [l.to_dict() for l in logs]
 
-    def delete_log(self, log_id):
-        return self.activitylog_repo.delete(log_id)
 
     def get_logs_by_action(self, action):
         logs = self.activitylog_repo.get_by_action(action)

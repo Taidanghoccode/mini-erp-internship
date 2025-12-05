@@ -74,3 +74,15 @@ def view_report():
     except Exception as e:
         print("VIEW REPORT ERROR:", e)
         return jsonify({"error": str(e)}), 500
+    
+
+@report_bp.route("/majors", methods=["GET"])
+@require_auth
+def majors():
+    uc = provide_report_uc()
+    user = g.current_user
+    try:
+        data = uc.get_majors(user.id)
+        return jsonify(data), 200
+    except PermissionError as e:
+        return jsonify({"error": str(e)}), 403

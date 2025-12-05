@@ -1,66 +1,58 @@
-from sqlalchemy.exc import IntegrityError
-from app.models.intern import Intern
 from app.db.db import db
-from app.interfaces.intern_port import InternRepoInterface
-from datetime import datetime
+from app.models.intern import Intern
+from sqlalchemy.exc import SQLAlchemyError
 
-class InternRepo(InternRepoInterface):
+class InternRepo:
 
     def get_all(self):
         return Intern.query.filter_by(is_deleted=False).all()
 
     def get_by_id(self, intern_id):
-        intern = Intern.query.get(intern_id)
-        return intern if intern and not intern.is_deleted else None
-
-    def create(self, data):
-        intern = Intern(**data)
-        db.session.add(intern)
-        try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            raise ValueError(f"Intern with email '{data.get('email')}' already exists")
-        return intern
-
-    def update(self, intern_id, data):
-        intern = self.get_by_id(intern_id)
-        if not intern:
-            return None
-        for key, value in data.items():
-            if hasattr(intern, key):
-                setattr(intern, key, value)
-        db.session.commit()
-        return intern
-
-    def delete(self, intern_id, soft=True):
-        intern = self.get_by_id(intern_id)
-        if not intern:
-            return None
-
-        if soft:
-            intern.is_deleted = True
-        else:
-            db.session.delete(intern)
-
-        db.session.commit()
-        return True
+        return Intern.query.filter_by(id=intern_id, is_deleted=False).first()
 
     def get_by_email(self, email):
         return Intern.query.filter_by(email=email, is_deleted=False).first()
 
     def get_any_by_email(self, email):
+        # check cả deleted
         return Intern.query.filter_by(email=email).first()
 
-    def filter_for_report(self, from_date=None, to_date=None, status=None):
-        q = Intern.query.filter_by(is_deleted=False)
+    def get_by_user_id(self, user_id):
+        return Intern.query.filter_by(user_id=user_id, is_deleted=False).first()
 
-        if from_date:
-            f = datetime.strptime(from_date, "%Y-%m-%d").date()
-            q = q.filter(Intern.start_date >= f)
+    def create(self, data: dict):
+        try:
+            intern = Intern(**data)
+            db.session.add(intern)
+            db.session.commit()
+            return intern
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            raise e
 
-        if to_date:
-            t = datetime.strptime(to_date, "%Y-%m-%d").date()
-            q = q.filter(Intern.start_date <= t)
+    def update(self, intern):
+        """CHỈ commit object, không dùng intern.__dict__ để tránh lỗi."""
+        try:
+            db.session.commit()
+            return intern
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            raise e
 
-        return q.all()
+    def delete(self, intern_id, soft=True):
+        intern = self.get_by_id(intern_id)
+        if not intern:
+            return False
+
+        try:
+            if soft:
+                intern.is_deleted = True
+            else:
+                db.session.delete(intern)
+
+            db.session.commit()
+            return True
+
+        except SQLAlchemyError:
+            db.session.rollback()
+            return False

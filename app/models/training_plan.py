@@ -17,9 +17,12 @@ class TrainingPlan(db.Model):
     intern_id = db.Column(db.Integer, db.ForeignKey("interns.id"), nullable=False)
 
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime(timezone=True), default = lambda:datetime.now(timezone.utc), onupdate=lambda:datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     is_deleted = db.Column(db.Boolean, default=False)
+    
+    creator = db.relationship("User", foreign_keys=[created_by], backref="created_training_plans")
+    
     intern = db.relationship("Intern", back_populates="training_plans")
 
     def to_dict(self):
@@ -35,6 +38,6 @@ class TrainingPlan(db.Model):
             "intern_id": self.intern_id,
             "is_deleted": self.is_deleted,
             "created_by": self.created_by,
-            "created_at":  self.created_at.isoformat() if self.created_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
